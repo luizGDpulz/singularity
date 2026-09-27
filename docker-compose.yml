@@ -14,6 +14,6 @@ services:
       - ./data:/app/data:rw
       # Mount host Antigravity CLI and auth credentials into the container
       - ${HOME:-/root}/.gemini:/root/.gemini:rw
-      # Mount host projects directory (allows mapping any project like /srv/src/secullum-vms)
-      - ${HOST_PROJECTS_DIR:-/srv/src}:/srv/src:rw
+      # Modular host projects directory mount (allows mapping any project under this path)
+      - ${HOST_PROJECTS_PATH:-/srv/src}:${HOST_PROJECTS_PATH:-/srv/src}:rw
     # Headless outbound-only architecture: no inbound ports exposed

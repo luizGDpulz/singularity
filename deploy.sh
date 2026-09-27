@@ -121,7 +121,11 @@ if [ "$RECONFIGURE" = true ]; then
     read -rp "📂 Diretório raiz para Auto-Sandboxes [Padrão: workspaces]: " INPUT_AUTO_ROOT
     AUTO_WORKSPACES_ROOT="${INPUT_AUTO_ROOT:-workspaces}"
 
-    # 7. EXECUTION_TIMEOUT_MS
+    # 7. HOST_PROJECTS_PATH
+    read -rp "📁 Diretório de projetos no host para montar no container [Padrão: /srv/src]: " INPUT_PROJECTS_PATH
+    HOST_PROJECTS_PATH="${INPUT_PROJECTS_PATH:-/srv/src}"
+
+    # 8. EXECUTION_TIMEOUT_MS
     read -rp "⏱️ Timeout de execução em milissegundos [Padrão: 600000 = 10min]: " INPUT_TIMEOUT
     EXECUTION_TIMEOUT_MS="${INPUT_TIMEOUT:-600000}"
 
@@ -141,6 +145,7 @@ EXECUTION_TIMEOUT_MS=${EXECUTION_TIMEOUT_MS}
 MAX_BUFFER_BYTES=15728640
 TYPING_INTERVAL_MS=7000
 AUTO_WORKSPACES_ROOT=${AUTO_WORKSPACES_ROOT}
+HOST_PROJECTS_PATH=${HOST_PROJECTS_PATH}
 EOF
 
     chmod 600 "$ENV_FILE"
