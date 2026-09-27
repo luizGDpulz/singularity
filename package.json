@@ -1,0 +1,39 @@
+{
+  "name": "singularity-bridge",
+  "version": "1.0.0",
+  "description": "A headless Discord bridge for Google Antigravity CLI and remote workspace execution",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx test/verify.ts"
+  },
+  "keywords": [
+    "discord",
+    "cli",
+    "antigravity",
+    "automation",
+    "workspace",
+    "bridge",
+    "daemon"
+  ],
+  "author": "luizGDpulz",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7",
+    "execa": "^9.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.24",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@11.3.0"
+}
