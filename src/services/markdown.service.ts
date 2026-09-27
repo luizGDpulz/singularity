@@ -316,7 +316,10 @@ export class MarkdownService {
       }
     );
 
-    // Step 7: Restore fenced code blocks
+    // Step 7: Convert Markdown tables to Box-Drawing Monospace Tables
+    content = this.formatMarkdownTables(content);
+
+    // Step 8: Restore fenced code blocks
     content = content.replace(
       new RegExp(`${fencePlaceholder}(\\d+)%%`, 'g'),
       (_match, idxStr: string) => {
@@ -326,6 +329,169 @@ export class MarkdownService {
     );
 
     return content;
+  }
+
+  /**
+   * Scans text for Markdown GFM tables and converts them into beautiful
+   * Unicode box-drawing tables enclosed in ```text code blocks for pixel-perfect Discord alignment.
+   */
+  public formatMarkdownTables(text: string): string {
+    const lines = text.split('\n');
+    const result: string[] = [];
+    let i = 0;
+
+    const isDelimiterRow = (line: string): boolean => {
+      const trimmed = line.trim();
+      if (!trimmed.includes('-')) return false;
+      if (!/^[|\-: ]+$/.test(trimmed)) return false;
+      const parts = trimmed.split('|').map((s) => s.trim()).filter(Boolean);
+      return parts.length > 0 && parts.every((p) => /^:?-+:?$/.test(p));
+    };
+
+    const isTableRow = (line: string): boolean => {
+      const trimmed = line.trim();
+      return trimmed.includes('|') && !trimmed.startsWith('```');
+    };
+
+    while (i < lines.length) {
+      const line = lines[i]!;
+
+      // Check if lines[i] is a header row and lines[i+1] is a valid delimiter row
+      if (
+        i + 1 < lines.length &&
+        isTableRow(line) &&
+        isDelimiterRow(lines[i + 1]!)
+      ) {
+        const headerLine = line;
+        const delimiterLine = lines[i + 1]!;
+        const dataLines: string[] = [];
+        i += 2;
+
+        while (i < lines.length && isTableRow(lines[i]!) && !isDelimiterRow(lines[i]!)) {
+          dataLines.push(lines[i]!);
+          i++;
+        }
+
+        const boxTable = this.renderBoxTable(headerLine, delimiterLine, dataLines);
+        result.push(boxTable);
+      } else {
+        result.push(line);
+        i++;
+      }
+    }
+
+    return result.join('\n');
+  }
+
+  /**
+   * Sanitizes a single table cell text for monospace code block display.
+   */
+  private cleanTableCell(cell: string): string {
+    return cell
+      .trim()
+      .replace(/\\ /g, ' ')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [text](url) -> text
+      .replace(/\*\*([^*]+)\*\*/g, '$1')       // **bold** -> bold
+      .replace(/\*([^*]+)\*/g, '$1')           // *italic* -> italic
+      .replace(/`([^`]+)`/g, '$1');            // `code` -> code
+  }
+
+  private parseCells(row: string): string[] {
+    let trimmed = row.trim();
+    if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+    if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+    return trimmed.split('|').map((c) => this.cleanTableCell(c));
+  }
+
+  private parseAlignments(delimiterRow: string): ('left' | 'center' | 'right')[] {
+    let trimmed = delimiterRow.trim();
+    if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+    if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+    return trimmed.split('|').map((c) => {
+      const s = c.trim();
+      const left = s.startsWith(':');
+      const right = s.endsWith(':');
+      if (left && right) return 'center';
+      if (right) return 'right';
+      return 'left';
+    });
+  }
+
+  private getVisibleLength(str: string): number {
+    return Array.from(str).length;
+  }
+
+  private renderBoxTable(headerLine: string, delimiterLine: string, dataLines: string[]): string {
+    const headerCells = this.parseCells(headerLine);
+    const alignments = this.parseAlignments(delimiterLine);
+    const dataRows = dataLines.map((line) => this.parseCells(line));
+
+    const colCount = Math.max(
+      headerCells.length,
+      alignments.length,
+      ...dataRows.map((r) => r.length)
+    );
+
+    if (colCount === 0) {
+      return [headerLine, delimiterLine, ...dataLines].join('\n');
+    }
+
+    const colWidths: number[] = Array.from({ length: colCount }, () => 3);
+
+    for (let c = 0; c < colCount; c++) {
+      const hLen = this.getVisibleLength(headerCells[c] || '');
+      if (hLen > colWidths[c]!) colWidths[c] = hLen;
+
+      for (const row of dataRows) {
+        const cellLen = this.getVisibleLength(row[c] || '');
+        if (cellLen > colWidths[c]!) colWidths[c] = cellLen;
+      }
+    }
+
+    const formatCell = (text: string, colIdx: number): string => {
+      const targetWidth = colWidths[colIdx]!;
+      const align = alignments[colIdx] || 'left';
+      const visibleLen = this.getVisibleLength(text);
+      const totalPad = Math.max(0, targetWidth - visibleLen);
+
+      if (align === 'right') {
+        return ' '.repeat(totalPad) + text;
+      }
+      if (align === 'center') {
+        const leftPad = Math.floor(totalPad / 2);
+        const rightPad = totalPad - leftPad;
+        return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+      }
+      return text + ' '.repeat(totalPad);
+    };
+
+    const topBorder = '┌' + colWidths.map((w) => '─'.repeat(w + 2)).join('┬') + '┐';
+    const midBorder = '├' + colWidths.map((w) => '─'.repeat(w + 2)).join('┼') + '┤';
+    const botBorder = '└' + colWidths.map((w) => '─'.repeat(w + 2)).join('┴') + '┘';
+
+    const headerRowStr =
+      '│ ' +
+      Array.from({ length: colCount }, (_, c) => formatCell(headerCells[c] || '', c)).join(' │ ') +
+      ' │';
+
+    const dataRowStrs = dataRows.map(
+      (row) =>
+        '│ ' +
+        Array.from({ length: colCount }, (_, c) => formatCell(row[c] || '', c)).join(' │ ') +
+        ' │'
+    );
+
+    const tableLines = [
+      '```text',
+      topBorder,
+      headerRowStr,
+      midBorder,
+      ...dataRowStrs,
+      botBorder,
+      '```',
+    ];
+
+    return tableLines.join('\n');
   }
 }
 
