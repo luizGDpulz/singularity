@@ -7,6 +7,7 @@ import {
   EmbedBuilder,
   Events,
   GatewayIntentBits,
+  Message,
   MessageFlags,
   Partials,
 } from 'discord.js';
@@ -148,6 +149,8 @@ client.on(Events.MessageCreate, async (message) => {
 
     // 5. Interactive Permission Check (if permissionMode is 'ask')
     const aiSettings = aiSettingsService.getSettings();
+    let promptMsg: Message | null = null;
+
     if (aiSettings.permissionMode === 'ask') {
       const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -159,7 +162,7 @@ client.on(Events.MessageCreate, async (message) => {
           .setCustomId('cancel_exec')
           .setLabel('Cancelar')
           .setStyle(ButtonStyle.Danger)
-          .setEmoji('❌')
+          .setEmoji('✖️')
       );
 
       const promptPreview = rawContent.length > 200 ? `${rawContent.slice(0, 197)}...` : rawContent;
@@ -181,7 +184,7 @@ client.on(Events.MessageCreate, async (message) => {
         )
         .setFooter({ text: 'Aguardando sua confirmação (expira em 60s)...' });
 
-      const promptMsg = await message.reply({
+      promptMsg = await message.reply({
         embeds: [confirmEmbed],
         components: [confirmRow],
       });
@@ -229,11 +232,42 @@ client.on(Events.MessageCreate, async (message) => {
       targetWorkspace: context.targetWorkspace,
     });
 
-    // 7. Deliver output back to the specific thread or channel
-    const header = runnerService.formatHeader(result, context.targetWorkspace);
-    const content = result.stdout || result.stderr || '[No output produced by process]';
+    // 7. Update confirmation prompt card status if interactive approval was used
+    if (promptMsg) {
+      const durationSeconds = (result.durationMs / 1000).toFixed(1);
+      if (result.failed) {
+        await promptMsg
+          .edit({
+            content: `❌ **Falha na execução** (${durationSeconds}s)`,
+            embeds: [],
+            components: [],
+          })
+          .catch(() => {});
+      } else {
+        await promptMsg
+          .edit({
+            content: `⚡ **Executado em ${durationSeconds}s** (\`${context.targetWorkspace}\`)`,
+            embeds: [],
+            components: [],
+          })
+          .catch(() => {});
+      }
+    }
 
-    await discordService.sendExecutionOutput(message.channel, content, header);
+    // 8. Deliver output back to the specific thread or channel
+    if (result.failed) {
+      const header = runnerService.formatHeader(result, context.targetWorkspace);
+      const content = result.stderr || result.stdout || '[Process exited with an error]';
+      await discordService.sendExecutionOutput(message.channel, content, {
+        isError: true,
+        header,
+      });
+    } else {
+      const content = result.stdout || result.stderr || '[No output produced by process]';
+      await discordService.sendExecutionOutput(message.channel, content, {
+        isError: false,
+      });
+    }
 
     console.log(
       `📤 [Task Complete] Succeeded: ${!result.failed} | Duration: ${(result.durationMs / 1000).toFixed(1)}s`

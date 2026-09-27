@@ -173,71 +173,160 @@ export class DiscordService {
   }
 
   /**
-   * Sends terminal output to the target Discord channel.
-   * - If <= 1900 chars: sends as a single ```bash code block.
-   * - If 1901..6000 chars: splits cleanly into <= 1900 chunks wrapped in ```bash code blocks.
-   * - If > 6000 chars: sends summary preview and attaches full logs as a .txt snippet.
+   * Splits conversational markdown cleanly into chunks of <= maxLength characters,
+   * respecting code block boundaries (```...```) so code blocks are never left unclosed.
+   */
+  public splitMarkdownChunks(text: string, maxLength: number = 1950): string[] {
+    if (!text || text.length <= maxLength) {
+      return text ? [text] : [];
+    }
+
+    const lines = text.split('\n');
+    const chunks: string[] = [];
+    let currentChunk = '';
+    let inCodeBlock = false;
+    let codeBlockLang = '';
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      const isFence = trimmedLine.startsWith('```');
+
+      // Check if adding this line would exceed the chunk limit
+      const lineLen = line.length + 1; // +1 for newline
+      const neededClosingFenceLen = inCodeBlock ? 4 : 0; // '\n```'
+      if (currentChunk.length + lineLen + neededClosingFenceLen > maxLength && currentChunk.length > 0) {
+        if (inCodeBlock) {
+          // Close fence in current chunk
+          currentChunk += '\n```';
+          chunks.push(currentChunk);
+          // Re-open fence in next chunk
+          currentChunk = `\`\`\`${codeBlockLang}\n${line}`;
+        } else {
+          chunks.push(currentChunk);
+          currentChunk = line;
+        }
+
+        if (isFence) {
+          if (inCodeBlock) {
+            inCodeBlock = false;
+            codeBlockLang = '';
+          } else {
+            inCodeBlock = true;
+            codeBlockLang = trimmedLine.replace(/^```/, '').trim();
+          }
+        }
+        continue;
+      }
+
+      // Track fence entry/exit
+      if (isFence) {
+        if (inCodeBlock) {
+          inCodeBlock = false;
+          codeBlockLang = '';
+        } else {
+          inCodeBlock = true;
+          codeBlockLang = trimmedLine.replace(/^```/, '').trim();
+        }
+      }
+
+      currentChunk = currentChunk.length === 0 ? line : `${currentChunk}\n${line}`;
+    }
+
+    if (currentChunk.length > 0) {
+      if (inCodeBlock) {
+        currentChunk += '\n```';
+      }
+      chunks.push(currentChunk);
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Sends execution output to the target Discord channel.
+   * - On success (natural AI conversation): Delivers output as native Discord Markdown
+   *   without outer ```bash code blocks, preserving formatting, headings, lists, and internal code blocks.
+   * - On failure (system/command error): Formats as an error card wrapped in a code block.
+   * - If > 6000 chars: sends summary preview and attaches full logs/response as a file.
    */
   public async sendExecutionOutput(
     channel: SendableChannel,
     output: string,
-    metadataHeader?: string
+    options: { header?: string; isError?: boolean } | string = {}
   ): Promise<void> {
-    const trimmedOutput = output.trim();
-    const headerPrefix = metadataHeader ? `${metadataHeader}\n` : '';
+    const opts = typeof options === 'string' ? { header: options, isError: false } : options;
+    const isError = Boolean(opts.isError);
+    const headerPrefix = opts.header ? `${opts.header}\n` : '';
 
-    if (!trimmedOutput) {
-      await channel.send(`${headerPrefix}\`\`\`bash\n[Process completed with empty output]\n\`\`\``);
+    // Strip ANSI color codes
+    const cleanOutput = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+
+    if (!cleanOutput) {
+      if (isError) {
+        await channel.send(`${headerPrefix}\`\`\`bash\n[Process completed with empty error output]\n\`\`\``);
+      } else {
+        await channel.send('*(Processo finalizado sem saída de texto.)*');
+      }
       return;
     }
 
-    // Strategy 1: Total output exceeds 6000 characters -> Attach as .txt snippet
-    if (trimmedOutput.length > DiscordService.ATTACHMENT_THRESHOLD) {
-      const buffer = Buffer.from(trimmedOutput, 'utf-8');
+    // 1. Error output delivery (Terminal / bash block)
+    if (isError) {
+      if (cleanOutput.length > DiscordService.ATTACHMENT_THRESHOLD) {
+        const buffer = Buffer.from(cleanOutput, 'utf-8');
+        const attachment = new AttachmentBuilder(buffer, {
+          name: `error-log-${Date.now()}.txt`,
+          description: 'Terminal error log from Singularity',
+        });
+        const tailPreview = this.getTailPreview(cleanOutput, 800);
+        await channel.send({
+          content: `${headerPrefix}⚠️ **Log de erro extenso (${cleanOutput.length.toLocaleString()} caracteres):**\n\`\`\`bash\n${tailPreview}\n\`\`\``,
+          files: [attachment],
+        });
+        return;
+      }
+
+      const combined = `${headerPrefix}\`\`\`bash\n${cleanOutput}\n\`\`\``;
+      if (combined.length <= 1980) {
+        await channel.send(combined);
+        return;
+      }
+
+      if (headerPrefix) {
+        await channel.send(headerPrefix.trim());
+      }
+      const chunks = this.splitIntoChunks(cleanOutput, DiscordService.MAX_CHUNK_LENGTH);
+      for (const chunk of chunks) {
+        await channel.send(`\`\`\`bash\n${chunk}\n\`\`\``);
+      }
+      return;
+    }
+
+    // 2. Normal Conversational Output (Native Rich Discord Markdown)
+    // If output is massive (> 6000 chars), attach full markdown file and send preview
+    if (cleanOutput.length > DiscordService.ATTACHMENT_THRESHOLD) {
+      const buffer = Buffer.from(cleanOutput, 'utf-8');
       const attachment = new AttachmentBuilder(buffer, {
-        name: `execution-output-${Date.now()}.txt`,
-        description: 'Complete terminal execution log from Singularity',
+        name: `resposta-singularity-${Date.now()}.md`,
+        description: 'Complete AI response from Singularity',
       });
 
-      // Provide a clean tail preview for immediate mobile readability
-      const tailPreview = this.getTailPreview(trimmedOutput, 800);
-      const messageContent = [
-        headerPrefix ? headerPrefix.trim() : '',
-        `📄 **Terminal output exceeded 6,000 chars (${trimmedOutput.length.toLocaleString()} characters).**`,
-        'Full output attached below as `.txt` log file.',
-        '**Log Preview (Tail):**',
-        '```bash',
-        tailPreview,
-        '```',
-      ]
-        .filter(Boolean)
-        .join('\n');
+      const preview =
+        cleanOutput.length > 1200
+          ? `${cleanOutput.slice(0, 1150)}...\n\n*(Conteúdo completo no anexo .md)*`
+          : cleanOutput;
 
       await channel.send({
-        content: messageContent,
+        content: `📄 **Resposta extensa (${cleanOutput.length.toLocaleString()} caracteres):**\n\n${preview}`,
         files: [attachment],
       });
       return;
     }
 
-    // Strategy 2: Output <= 1900 chars (taking header into account)
-    const combinedInitial = `${headerPrefix}\`\`\`bash\n${trimmedOutput}\n\`\`\``;
-    if (combinedInitial.length <= 1980) {
-      await channel.send(combinedInitial);
-      return;
-    }
-
-    // Strategy 3: Output between 1901 and 6000 chars -> Split into multiple bash chunks
-    if (headerPrefix) {
-      await channel.send(headerPrefix.trim());
-    }
-
-    const chunks = this.splitIntoChunks(trimmedOutput, DiscordService.MAX_CHUNK_LENGTH);
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      if (!chunk) continue;
-      const progressLabel = chunks.length > 1 ? `/* [Chunk ${i + 1}/${chunks.length}] */\n` : '';
-      await channel.send(`\`\`\`bash\n${progressLabel}${chunk}\n\`\`\``);
+    // Normal markdown delivery: split into clean markdown chunks (<= 1950 chars)
+    const mdChunks = this.splitMarkdownChunks(cleanOutput, 1950);
+    for (const chunk of mdChunks) {
+      await channel.send(chunk);
     }
   }
 

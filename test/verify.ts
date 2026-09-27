@@ -136,5 +136,15 @@ aiSettingsService.stepEffort('prev');
 console.assert(aiSettingsService.getSettings().effort === 'medium', 'Effort should step from high to medium');
 console.log('✅ Effort stepper ◀ ▶ passed.');
 
+// 6. Test Markdown Chunking and Codeblock Preservation
+console.log('\n--- Testing DiscordService.splitMarkdownChunks ---');
+const mdText = 'Olá! Aqui está o resumo do código:\n```typescript\n' + 'const item = 1;\n'.repeat(100) + '```\nFim!';
+const mdChunks = discordService.splitMarkdownChunks(mdText, 500);
+console.assert(mdChunks.length > 1, 'Should split large codeblock across chunks');
+console.assert(mdChunks[0]?.endsWith('```'), 'Chunk 1 must cleanly close the open code fence');
+console.assert(mdChunks[1]?.startsWith('```typescript'), 'Chunk 2 must re-open the code fence with the original language');
+console.log(`✅ Markdown code block fence preservation passed (${mdChunks.length} chunks generated).`);
+
 console.log('\n🎉 ALL VERIFICATION TESTS PASSED SUCCESSFULLY!');
+
 
