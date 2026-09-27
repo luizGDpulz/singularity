@@ -4,7 +4,7 @@ import {
   type ThreadChannel,
 } from 'discord.js';
 import { env } from '../config/env.js';
-import { gitService } from './git.service.js';
+import { markdownService } from './markdown.service.js';
 import { workspaceService } from './workspace.service.js';
 import type {
   ContextResolution,
@@ -268,9 +268,10 @@ export class DiscordService {
     // Strip ANSI color codes
     let cleanOutput = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
 
-    // Transform unclickable file:// links into clickable GitHub URLs or clean inline code badges
+    // Format rich conversational markdown specifically for Discord
+    // (translates LaTeX KaTeX math to Unicode, normalizes H4-H6 headings, and maps file:// links)
     if (!isError && cleanOutput) {
-      cleanOutput = gitService.transformFileLinks(cleanOutput, opts.workspaceDir);
+      cleanOutput = markdownService.formatForDiscord(cleanOutput, opts.workspaceDir);
     }
 
     if (!cleanOutput) {
@@ -355,10 +356,10 @@ export class DiscordService {
   }
 
   /**
-   * Sanitizes markdown text by transforming file:// links to GitHub URLs or inline code badges.
+   * Sanitizes markdown text specifically for Discord (links, math, headings).
    */
   public sanitizeFileLinks(markdown: string, workspaceDir?: string): string {
-    return gitService.transformFileLinks(markdown, workspaceDir);
+    return markdownService.formatForDiscord(markdown, workspaceDir);
   }
 }
 

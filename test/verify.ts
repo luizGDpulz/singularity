@@ -223,7 +223,72 @@ console.assert(
 );
 console.log('✅ Full conversational markdown link transformation passed.');
 
+// 8. Test MarkdownService (LaTeX to Unicode & Discord Heading Normalization)
+console.log('\n--- Testing MarkdownService (LaTeX math & Headings) ---');
+import { markdownService } from '../src/services/markdown.service.js';
+
+const primeResponseSample = [
+  'Aqui está a implementação considerada o padrão ouro em Python para uso geral (números de até $\\approx 10^{14}$), combinando legibilidade, tipagem estrita e alta performance com complexidade $\\mathcal{O}(\\sqrt{n})$:',
+  '',
+  '```python',
+  'import math',
+  'def is_prime(n: int) -> bool:',
+  '    limit = math.isqrt(n)',
+  '    for i in range(5, limit + 1, 6):',
+  '        if n % i == 0 or n % (i + 2) == 0:',
+  '            return False',
+  '    return True',
+  '```',
+  '',
+  '#### 1. Redução do espaço de busca para $\\sqrt{n}$',
+  'Se $n$ for composto, ele pode ser fatorado como $n = a \\times b$. É matematicamente impossível que ambos $a$ e $b$ sejam maiores que $\\sqrt{n}$ (caso contrário, $a \\times b > n$). Logo, se nenhum divisor for encontrado até $\\lfloor\\sqrt{n}\\rfloor$, o número é garantidamente primo.',
+  '',
+  '#### 2. Otimização da Roda $6k \\pm 1$ (Elimina 66% das iterações)',
+  'Qualquer número inteiro pode ser expresso como $6k + r$, onde $r \\in \\{0, 1, 2, 3, 4, 5\\}$:',
+  '- $6k$, $6k+2$ e $6k+4$ são pares (divisíveis por 2).',
+  '- $6k+3$ é ímpar, mas divisível por 3.',
+  '- Sobram apenas $6k+1$ e $6k+5$ (que equivale a $6(k+1) - 1$).',
+  'Como já eliminamos os múltiplos de 2 e 3 no início, só precisamos testar candidatos da forma $6k \\pm 1$.',
+  '',
+  '#### 3. Uso do `math.isqrt` (Python 3.8+)',
+  'Muitas soluções usam `int(n**0.5)` ou `math.sqrt(n)`. math.isqrt(n) é exato.',
+  '',
+  'Visão de Arquiteto: E para números gigantescos ($n > 10^{18}$)?',
+  'Complexidade $\\mathcal{O}(k \\log^3 n)$ (instantâneo até $n \\approx 3 \\times 10^{24}$).',
+  'Fração de teste: $\\frac{1}{3}$.',
+  'Preço sem LaTeX: O servidor custa $15 por mês e a API $0.05 por chamada.',
+].join('\n');
+
+const cleaned = markdownService.formatForDiscord(primeResponseSample);
+
+// Verify Heading Normalization
+console.assert(cleaned.includes('### 1. Redução do espaço de busca para √n'), 'H4 heading must normalize to ### with converted math');
+console.assert(cleaned.includes('### 2. Otimização da Roda 6k ± 1'), 'H4 heading with ± must normalize to ###');
+console.assert(cleaned.includes('### 3. Uso do `math.isqrt`'), 'H4 heading with inline code must normalize to ###');
+console.log('✅ Unsupported Discord headings (#### -> ###) normalized.');
+
+// Verify LaTeX Math Conversion
+console.assert(cleaned.includes('≈ 10¹⁴'), 'approx and exponent must convert to Unicode (≈ 10¹⁴)');
+console.assert(cleaned.includes('O(√n)'), 'mathcal O and sqrt must convert to O(√n)');
+console.assert(cleaned.includes('n = a × b'), 'times symbol must convert to ×');
+console.assert(cleaned.includes('⌊√n⌋'), 'lfloor/rfloor must convert to ⌊√n⌋');
+console.assert(cleaned.includes('r ∈ {0, 1, 2, 3, 4, 5}'), 'in and braces must convert cleanly');
+console.assert(cleaned.includes('n > 10¹⁸'), 'exponent 18 must convert to ¹⁸');
+console.assert(cleaned.includes('O(k log³ n)'), 'log cubed must convert to log³');
+console.assert(cleaned.includes('n ≈ 3 × 10²⁴'), 'composite math formula must convert cleanly');
+console.assert(cleaned.includes('1/3'), 'fraction must convert cleanly');
+console.log('✅ LaTeX math formulas ($...$) converted to clean Unicode math.');
+
+// Verify Code Blocks and Inline Code Preservation
+console.assert(cleaned.includes('def is_prime(n: int) -> bool:'), 'Code block content must be preserved untouched');
+console.assert(cleaned.includes('`int(n**0.5)`'), 'Inline code block must be preserved untouched');
+
+// Verify Currency Protection
+console.assert(cleaned.includes('$15 por mês e a API $0.05 por chamada'), 'Currency dollar signs must not be corrupted');
+console.log('✅ Code blocks, inline code, and currency protection verified.');
+
 console.log('\n🎉 ALL VERIFICATION TESTS PASSED SUCCESSFULLY!');
+
 
 
 
