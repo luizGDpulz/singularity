@@ -1,6 +1,9 @@
 import {
   ActionRowBuilder,
   AutocompleteInteraction,
+  ButtonBuilder,
+  ButtonInteraction,
+  ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
   ModalBuilder,
@@ -122,6 +125,8 @@ export async function handleAutocomplete(interaction: AutocompleteInteraction): 
 export function buildAiSettingsPanel() {
   const settings = aiSettingsService.getSettings();
   const currentModelName = aiSettingsService.getModelName();
+  const { visual: effortVisual, description: effortDesc } = aiSettingsService.renderEffortSlider();
+  const supportedEfforts = aiSettingsService.getSupportedEfforts();
 
   const permissionModeLabel =
     settings.permissionMode === 'ask'
@@ -132,7 +137,7 @@ export function buildAiSettingsPanel() {
     .setColor(0x5865f2)
     .setTitle('⚙️ Singularity — Painel de Configurações de IA & Permissões')
     .setDescription(
-      'Gerencie o modelo, o esforço cognitivo do agente e as regras de confirmação de comandos no Discord.'
+      'Gerencie o modelo, o nível de raciocínio cognitivo e as regras de confirmação no Discord.'
     )
     .addFields(
       {
@@ -141,9 +146,9 @@ export function buildAiSettingsPanel() {
         inline: true,
       },
       {
-        name: '🧠 Nível de Raciocínio (Effort)',
-        value: `\`${settings.effort.toUpperCase()}\``,
-        inline: true,
+        name: '🧠 Raciocínio (Reasoning Effort)',
+        value: `${effortVisual}\n*${effortDesc}*`,
+        inline: false,
       },
       {
         name: '🛡️ Modo de Permissões',
@@ -151,10 +156,11 @@ export function buildAiSettingsPanel() {
         inline: false,
       }
     )
-    .setFooter({ text: 'Selecione abaixo para alternar qualquer configuração instantaneamente.' })
+    .setFooter({ text: 'Selecione o modelo acima ou use as setas ◀ ▶ para alterar o esforço estilo agy.' })
     .setTimestamp();
 
-  // Select Menu 1: Models
+  // Row 1: Model Select Menu (Base models)
+  const normalizedCurrent = aiSettingsService.normalizeModel(settings.model).modelId;
   const modelSelect = new StringSelectMenuBuilder()
     .setCustomId('singularity_select_model')
     .setPlaceholder('Escolha um modelo de IA...')
@@ -164,61 +170,57 @@ export function buildAiSettingsPanel() {
           .setLabel(m.name.slice(0, 100))
           .setDescription(m.description.slice(0, 100))
           .setValue(m.id)
-          .setDefault(m.id === settings.model)
+          .setDefault(m.id === normalizedCurrent)
       )
     );
 
-  // Select Menu 2: Reasoning Effort
-  const effortSelect = new StringSelectMenuBuilder()
-    .setCustomId('singularity_select_effort')
-    .setPlaceholder('Escolha o nível de raciocínio (Effort)...')
-    .addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel('⚡ Low (Baixo / Respostas Rápidas)')
-        .setDescription('Menor latência, ideal para perguntas simples')
-        .setValue('low')
-        .setDefault(settings.effort === 'low'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('⚖️ Medium (Médio / Equilibrado)')
-        .setDescription('Equilíbrio padrão entre velocidade e análise')
-        .setValue('medium')
-        .setDefault(settings.effort === 'medium'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('🧠 High (Alto / Raciocínio Profundo - Recomendado)')
-        .setDescription('Análise aprofundada de código, arquivos e arquitetura')
-        .setValue('high')
-        .setDefault(settings.effort === 'high'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('🚀 Max (Máximo / Capacidade Extrema)')
-        .setDescription('Máximo orçamento de pensamento para tarefas complexas')
-        .setValue('max')
-        .setDefault(settings.effort === 'max')
-    );
-
-  // Select Menu 3: Permission Mode
-  const permissionSelect = new StringSelectMenuBuilder()
-    .setCustomId('singularity_select_permissions')
-    .setPlaceholder('Escolha o modo de permissões de execução...')
-    .addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel('🟢 Autônomo (Auto-Approve)')
-        .setDescription('Executa comandos diretamente sem pedir confirmação no chat')
-        .setValue('auto')
-        .setDefault(settings.permissionMode === 'auto'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('🟡 Pedir Confirmação no Chat (Ask First)')
-        .setDescription('Envia botões [Aprovar] e [Cancelar] no Discord antes de rodar')
-        .setValue('ask')
-        .setDefault(settings.permissionMode === 'ask')
-    );
-
   const row1 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(modelSelect);
-  const row2 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(effortSelect);
-  const row3 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(permissionSelect);
+
+  // Row 2: Effort Stepper Buttons (◀ / ▶) + Perm Toggle + Quotas (Max 5 buttons)
+  const isEffortSupported = supportedEfforts.length > 1;
+  const currentIndex = supportedEfforts.indexOf(settings.effort);
+  const canStepPrev = isEffortSupported && currentIndex > 0;
+  const canStepNext = isEffortSupported && currentIndex >= 0 && currentIndex < supportedEfforts.length - 1;
+
+  const prevBtn = new ButtonBuilder()
+    .setCustomId('singularity_btn_effort_prev')
+    .setLabel('◀ Menos')
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(!canStepPrev);
+
+  const statusBtn = new ButtonBuilder()
+    .setCustomId('singularity_btn_effort_status')
+    .setLabel(isEffortSupported ? `🧠 ${settings.effort.toUpperCase()}` : '🔒 Fixo')
+    .setStyle(ButtonStyle.Primary)
+    .setDisabled(true);
+
+  const nextBtn = new ButtonBuilder()
+    .setCustomId('singularity_btn_effort_next')
+    .setLabel('Mais ▶')
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(!canStepNext);
+
+  const permBtn = new ButtonBuilder()
+    .setCustomId('singularity_btn_perm_toggle')
+    .setLabel(settings.permissionMode === 'ask' ? '🛡️ Perguntar' : '⚡ Auto')
+    .setStyle(settings.permissionMode === 'ask' ? ButtonStyle.Primary : ButtonStyle.Success);
+
+  const usageBtn = new ButtonBuilder()
+    .setCustomId('singularity_btn_usage')
+    .setLabel('📊 Quotas')
+    .setStyle(ButtonStyle.Secondary);
+
+  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    prevBtn,
+    statusBtn,
+    nextBtn,
+    permBtn,
+    usageBtn
+  );
 
   return {
     embeds: [embed],
-    components: [row1, row2, row3],
+    components: [row1, row2],
     ephemeral: true,
   };
 }
@@ -237,19 +239,71 @@ export async function handleAiSelectInteraction(
     return;
   }
 
-  const selectedValue = interaction.values[0];
-  if (!selectedValue) return;
+  // Acknowledge interaction immediately (<50ms) to avoid Discord 3s timeout
+  await interaction.deferUpdate();
 
-  if (interaction.customId === 'singularity_select_model') {
+  const selectedValue = interaction.values[0];
+  if (selectedValue && interaction.customId === 'singularity_select_model') {
     aiSettingsService.setModel(selectedValue);
-  } else if (interaction.customId === 'singularity_select_effort') {
-    aiSettingsService.setEffort(selectedValue as ReasoningEffort);
-  } else if (interaction.customId === 'singularity_select_permissions') {
-    aiSettingsService.setPermissionMode(selectedValue as PermissionMode);
   }
 
   // Update visual message in place
-  await interaction.update(buildAiSettingsPanel());
+  await interaction.editReply(buildAiSettingsPanel());
+}
+
+/**
+ * Handles button interactions (Effort Stepper ◀ ▶, Permission toggle, and Quotas).
+ */
+export async function handleAiButtonInteraction(
+  interaction: ButtonInteraction
+): Promise<void> {
+  if (interaction.user.id !== env.allowedUserId) {
+    await interaction.reply({ content: '⛔ Acesso negado.', ephemeral: true });
+    return;
+  }
+
+  // Acknowledge interaction immediately (<50ms) to avoid Discord 3s timeout
+  await interaction.deferUpdate();
+
+  if (interaction.customId === 'singularity_btn_effort_prev') {
+    aiSettingsService.stepEffort('prev');
+    await interaction.editReply(buildAiSettingsPanel());
+  } else if (interaction.customId === 'singularity_btn_effort_next') {
+    aiSettingsService.stepEffort('next');
+    await interaction.editReply(buildAiSettingsPanel());
+  } else if (interaction.customId === 'singularity_btn_perm_toggle') {
+    const currentMode = aiSettingsService.getSettings().permissionMode;
+    aiSettingsService.setPermissionMode(currentMode === 'ask' ? 'auto' : 'ask');
+    await interaction.editReply(buildAiSettingsPanel());
+  } else if (interaction.customId === 'singularity_btn_usage') {
+    const quotas = await aiSettingsService.fetchUsageQuota(env.commandPrefixBin);
+    if (quotas.length === 0) {
+      await interaction.followUp({
+        content: '⚠️ Não foi possível obter as cotas do `agy` no momento.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const geminiQuotas = quotas.filter((q) => q.group.toLowerCase().includes('gemini'));
+    const claudeGptQuotas = quotas.filter((q) => !q.group.toLowerCase().includes('gemini'));
+
+    const formatQuota = (items: typeof quotas) =>
+      items
+        .map((item) => `• **${item.metric}:**\n  \`${aiSettingsService.renderProgressBar(item.percent)}\``)
+        .join('\n');
+
+    const quotaEmbed = new EmbedBuilder()
+      .setColor(0x22c55e)
+      .setTitle('📊 Singularity — Quotas & Limites de Uso (Antigravity)')
+      .addFields(
+        { name: '🟢 Gemini Models', value: formatQuota(geminiQuotas) || 'N/A', inline: false },
+        { name: '🟡 Claude & GPT Models', value: formatQuota(claudeGptQuotas) || 'N/A', inline: false }
+      )
+      .setTimestamp();
+
+    await interaction.followUp({ embeds: [quotaEmbed], ephemeral: true });
+  }
 }
 
 /**

@@ -100,4 +100,41 @@ console.assert(autoRes.isAutoSandbox === true, 'Should resolve to auto-sandbox')
 console.assert(autoRes.path.includes('teste-sandbox'), 'Path should include sanitized slug');
 console.log('✅ Auto-sandbox resolution passed:', autoRes.path);
 
+// 5. Test AiSettingsService Model Normalization and CLI Args
+console.log('\n--- Testing AiSettingsService ---');
+import { aiSettingsService } from '../src/services/ai-settings.service.js';
+
+// Normalization
+const norm1 = aiSettingsService.normalizeModel('gemini-3.8-flash-high');
+console.assert(norm1.modelId === 'gemini-3.8-flash', 'ModelId should be stripped of -high');
+console.assert(norm1.inferredEffort === 'high', 'Inferred effort should be high');
+console.log('✅ Normalization of legacy model ID passed.');
+
+// CLI args for Gemini with effort
+aiSettingsService.setModel('gemini-3.8-flash');
+aiSettingsService.setEffort('medium');
+const cliArgsGemini = aiSettingsService.buildCliArgs('agy -p', 'Hello');
+console.assert(cliArgsGemini.fullArgs.includes('--model') && cliArgsGemini.fullArgs.includes('gemini-3.8-flash'), 'Should include base model');
+console.assert(cliArgsGemini.fullArgs.includes('--effort') && cliArgsGemini.fullArgs.includes('medium'), 'Should include effort medium');
+console.log('✅ Gemini CLI arguments builder passed:', cliArgsGemini.fullArgs.join(' '));
+
+// CLI args for Claude without effort
+aiSettingsService.setModel('claude-sonnet-4-6');
+const cliArgsClaude = aiSettingsService.buildCliArgs('agy -p', 'Hello');
+console.assert(!cliArgsClaude.fullArgs.includes('--effort'), 'Claude should NOT include --effort');
+console.assert(cliArgsClaude.fullArgs.includes('claude-sonnet-4-6'), 'Should include claude model');
+console.log('✅ Claude CLI arguments (no effort flag) passed:', cliArgsClaude.fullArgs.join(' '));
+
+// Stepper
+aiSettingsService.setModel('gemini-3.8-flash');
+aiSettingsService.setEffort('low');
+aiSettingsService.stepEffort('next');
+console.assert(aiSettingsService.getSettings().effort === 'medium', 'Effort should step from low to medium');
+aiSettingsService.stepEffort('next');
+console.assert(aiSettingsService.getSettings().effort === 'high', 'Effort should step from medium to high');
+aiSettingsService.stepEffort('prev');
+console.assert(aiSettingsService.getSettings().effort === 'medium', 'Effort should step from high to medium');
+console.log('✅ Effort stepper ◀ ▶ passed.');
+
 console.log('\n🎉 ALL VERIFICATION TESTS PASSED SUCCESSFULLY!');
+
