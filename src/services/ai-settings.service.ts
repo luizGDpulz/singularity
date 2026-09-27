@@ -61,10 +61,13 @@ export const AVAILABLE_MODELS: ModelOption[] = [
   },
 ];
 
+export type PermissionMode = 'auto' | 'ask';
+
 export interface AiSettings {
   model: string;
   effort: ReasoningEffort;
   skipPermissions: boolean;
+  permissionMode: PermissionMode;
 }
 
 export class AiSettingsService {
@@ -82,6 +85,7 @@ export class AiSettingsService {
       model: 'gemini-3.8-flash-high',
       effort: 'high',
       skipPermissions: true,
+      permissionMode: 'auto',
     };
 
     this.loadSettings();
@@ -94,6 +98,9 @@ export class AiSettingsService {
         const parsed = JSON.parse(raw);
         if (parsed.model) this.settings.model = parsed.model;
         if (parsed.effort) this.settings.effort = parsed.effort;
+        if (parsed.permissionMode === 'auto' || parsed.permissionMode === 'ask') {
+          this.settings.permissionMode = parsed.permissionMode;
+        }
         if (typeof parsed.skipPermissions === 'boolean') {
           this.settings.skipPermissions = parsed.skipPermissions;
         }
@@ -141,6 +148,12 @@ export class AiSettingsService {
     this.settings.effort = effort;
     this.saveSettings();
     console.log(`🧠 [AiSettings] Reasoning Effort set to: ${effort}`);
+  }
+
+  public setPermissionMode(mode: PermissionMode): void {
+    this.settings.permissionMode = mode;
+    this.saveSettings();
+    console.log(`🛡️ [AiSettings] Permission Mode set to: ${mode}`);
   }
 
   public getModelName(modelId: string = this.settings.model): string {

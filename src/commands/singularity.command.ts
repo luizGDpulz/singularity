@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder,
+  AutocompleteInteraction,
   ChatInputCommandInteraction,
   EmbedBuilder,
   SlashCommandBuilder,
@@ -11,6 +12,7 @@ import { env } from '../config/env.js';
 import {
   AVAILABLE_MODELS,
   aiSettingsService,
+  type PermissionMode,
   type ReasoningEffort,
 } from '../services/ai-settings.service.js';
 import { workspaceService } from '../services/workspace.service.js';
@@ -24,39 +26,38 @@ export const singularityCommand = new SlashCommandBuilder()
       .setName('info')
       .setDescription('View current channel workspace path, mode, and CLI configuration')
   )
-  // Subcommand: model (Interactive Model & Effort Panel)
+  // Subcommand: config (Unified AI, effort, and permissions panel with autocomplete)
   .addSubcommand((sub) =>
     sub
-      .setName('model')
-      .setDescription('Open the visual AI Model and Reasoning Effort management panel')
+      .setName('config')
+      .setDescription('Configure AI model, reasoning effort, and interactive permission modes')
       .addStringOption((opt) =>
         opt
-          .setName('set')
-          .setDescription('Directly set the active model ID')
+          .setName('model')
+          .setDescription('Select AI model (autocomplete enabled)')
           .setRequired(false)
-          .addChoices(
-            ...AVAILABLE_MODELS.slice(0, 25).map((m) => ({
-              name: `${m.name} (${m.id})`.slice(0, 100),
-              value: m.id,
-            }))
-          )
+          .setAutocomplete(true)
       )
-  )
-  // Subcommand: effort (Quick Effort Switch)
-  .addSubcommand((sub) =>
-    sub
-      .setName('effort')
-      .setDescription('Configure AI reasoning effort level (Low, Medium, High, Max)')
       .addStringOption((opt) =>
         opt
-          .setName('level')
-          .setDescription('Target reasoning effort')
-          .setRequired(true)
+          .setName('effort')
+          .setDescription('Set reasoning effort (Low, Medium, High, Max)')
+          .setRequired(false)
           .addChoices(
             { name: '⚡ Low (Ultra-fast / lightweight)', value: 'low' },
             { name: '⚖️ Medium (Balanced speed & depth)', value: 'medium' },
             { name: '🧠 High (Deep reasoning & code analysis - Recommended)', value: 'high' },
             { name: '🚀 Max (Maximum reasoning budget)', value: 'max' }
+          )
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName('permissions')
+          .setDescription('Execution permission mode')
+          .setRequired(false)
+          .addChoices(
+            { name: '🟢 Auto-Approve (Autonomous / No prompt)', value: 'auto' },
+            { name: '🟡 Ask First (Interactive Discord confirmation buttons)', value: 'ask' }
           )
       )
   )
@@ -86,17 +87,48 @@ export const singularityCommand = new SlashCommandBuilder()
   );
 
 /**
- * Generates the rich interactive visual panel for AI model and reasoning effort.
+ * Handles autocomplete requests for /singularity config model:<query>.
+ */
+export async function handleAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
+  if (interaction.user.id !== env.allowedUserId) {
+    await interaction.respond([]);
+    return;
+  }
+
+  const focusedOption = interaction.options.getFocused(true);
+
+  if (focusedOption.name === 'model') {
+    const query = focusedOption.value.toLowerCase();
+    const filtered = AVAILABLE_MODELS.filter(
+      (m) => m.name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query)
+    ).slice(0, 25);
+
+    await interaction.respond(
+      filtered.map((m) => ({
+        name: `${m.name} (${m.id})`.slice(0, 100),
+        value: m.id,
+      }))
+    );
+  }
+}
+
+/**
+ * Generates the rich interactive visual panel for AI model, reasoning effort, and permission mode.
  */
 export function buildAiSettingsPanel() {
   const settings = aiSettingsService.getSettings();
   const currentModelName = aiSettingsService.getModelName();
 
+  const permissionModeLabel =
+    settings.permissionMode === 'ask'
+      ? '🟡 **Pedir Confirmação no Chat** *(Botões de aprovação antes de executar)*'
+      : '🟢 **Autônomo (Auto-Approve)** *(Execução imediata sem interrupções)*';
+
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle('🧠 Singularity — Gestão de Modelo de IA & Raciocínio')
+    .setTitle('⚙️ Singularity — Painel de Configurações de IA & Permissões')
     .setDescription(
-      'Configure o modelo de inteligência artificial e o orçamento de raciocínio lógico utilizados pelo **Antigravity CLI** nas execuções deste bridge.'
+      'Gerencie o modelo, o esforço cognitivo do agente e as regras de confirmação de comandos no Discord.'
     )
     .addFields(
       {
@@ -110,12 +142,12 @@ export function buildAiSettingsPanel() {
         inline: true,
       },
       {
-        name: '🔓 Permissões Headless',
-        value: '`Auto-Aprovadas (--dangerously-skip-permissions)`',
+        name: '🛡️ Modo de Permissões',
+        value: permissionModeLabel,
         inline: false,
       }
     )
-    .setFooter({ text: 'Selecione abaixo para alternar instantaneamente.' })
+    .setFooter({ text: 'Selecione abaixo para alternar qualquer configuração instantaneamente.' })
     .setTimestamp();
 
   // Select Menu 1: Models
@@ -139,32 +171,50 @@ export function buildAiSettingsPanel() {
     .addOptions(
       new StringSelectMenuOptionBuilder()
         .setLabel('⚡ Low (Baixo / Respostas Rápidas)')
-        .setDescription('Menor tempo de latência, ideal para perguntas simples')
+        .setDescription('Menor latência, ideal para perguntas simples')
         .setValue('low')
         .setDefault(settings.effort === 'low'),
       new StringSelectMenuOptionBuilder()
         .setLabel('⚖️ Medium (Médio / Equilibrado)')
-        .setDescription('Equilíbrio ótimo entre velocidade e análise')
+        .setDescription('Equilíbrio padrão entre velocidade e análise')
         .setValue('medium')
         .setDefault(settings.effort === 'medium'),
       new StringSelectMenuOptionBuilder()
         .setLabel('🧠 High (Alto / Raciocínio Profundo - Recomendado)')
-        .setDescription('Análise detalhada de código, arquivos e arquitetura')
+        .setDescription('Análise aprofundada de código, arquivos e arquitetura')
         .setValue('high')
         .setDefault(settings.effort === 'high'),
       new StringSelectMenuOptionBuilder()
         .setLabel('🚀 Max (Máximo / Capacidade Extrema)')
-        .setDescription('Máximo orçamento de pensamento para refatorações pesadas')
+        .setDescription('Máximo orçamento de pensamento para tarefas complexas')
         .setValue('max')
         .setDefault(settings.effort === 'max')
     );
 
+  // Select Menu 3: Permission Mode
+  const permissionSelect = new StringSelectMenuBuilder()
+    .setCustomId('singularity_select_permissions')
+    .setPlaceholder('Escolha o modo de permissões de execução...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel('🟢 Autônomo (Auto-Approve)')
+        .setDescription('Executa comandos diretamente sem pedir confirmação no chat')
+        .setValue('auto')
+        .setDefault(settings.permissionMode === 'auto'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('🟡 Pedir Confirmação no Chat (Ask First)')
+        .setDescription('Envia botões [Aprovar] e [Cancelar] no Discord antes de rodar')
+        .setValue('ask')
+        .setDefault(settings.permissionMode === 'ask')
+    );
+
   const row1 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(modelSelect);
   const row2 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(effortSelect);
+  const row3 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(permissionSelect);
 
   return {
     embeds: [embed],
-    components: [row1, row2],
+    components: [row1, row2, row3],
     ephemeral: true,
   };
 }
@@ -190,6 +240,8 @@ export async function handleAiSelectInteraction(
     aiSettingsService.setModel(selectedValue);
   } else if (interaction.customId === 'singularity_select_effort') {
     aiSettingsService.setEffort(selectedValue as ReasoningEffort);
+  } else if (interaction.customId === 'singularity_select_permissions') {
+    aiSettingsService.setPermissionMode(selectedValue as PermissionMode);
   }
 
   // Update visual message in place
@@ -226,23 +278,34 @@ export async function handleSingularityCommand(
   const channelName = 'name' in channel ? channel.name : channelId;
 
   switch (subcommand) {
-    case 'model': {
-      const explicitModel = interaction.options.getString('set');
+    case 'config': {
+      const explicitModel = interaction.options.getString('model');
+      const explicitEffort = interaction.options.getString('effort') as ReasoningEffort | null;
+      const explicitPermissions = interaction.options.getString('permissions') as PermissionMode | null;
+
+      let changedSomething = false;
       if (explicitModel) {
         aiSettingsService.setModel(explicitModel);
+        changedSomething = true;
       }
-      const panel = buildAiSettingsPanel();
-      await interaction.reply(panel);
-      break;
-    }
+      if (explicitEffort) {
+        aiSettingsService.setEffort(explicitEffort);
+        changedSomething = true;
+      }
+      if (explicitPermissions) {
+        aiSettingsService.setPermissionMode(explicitPermissions);
+        changedSomething = true;
+      }
 
-    case 'effort': {
-      const effortLevel = interaction.options.getString('level', true) as ReasoningEffort;
-      aiSettingsService.setEffort(effortLevel);
-      await interaction.reply({
-        content: `🧠 **Reasoning Effort atualizado para:** \`${effortLevel.toUpperCase()}\``,
-        ephemeral: true,
-      });
+      const panel = buildAiSettingsPanel();
+      if (changedSomething) {
+        await interaction.reply({
+          content: '✅ **Configurações atualizadas com sucesso!**',
+          ...panel,
+        });
+      } else {
+        await interaction.reply(panel);
+      }
       break;
     }
 
@@ -259,6 +322,10 @@ export async function handleSingularityCommand(
         : '🔗 **Projeto Mapeado Manualmente**';
 
       const aiSettings = aiSettingsService.getSettings();
+      const permLabel =
+        aiSettings.permissionMode === 'ask'
+          ? '🟡 Pedir Confirmação no Chat (Ask First)'
+          : '🟢 Autônomo (Auto-Approve)';
 
       const response = [
         '### 🌌 Singularity Channel Status',
@@ -267,7 +334,7 @@ export async function handleSingularityCommand(
         `• **Diretório Ativo:** \`${resolution.path}\``,
         `• **Modelo Ativo:** \`${aiSettingsService.getModelName()}\` (\`${aiSettings.model}\`)`,
         `• **Nível de Esforço (Effort):** \`${aiSettings.effort.toUpperCase()}\``,
-        `• **Permissões Headless:** \`--dangerously-skip-permissions\` ✅`,
+        `• **Modo de Permissões:** ${permLabel}`,
         env.allowedCategoryId ? `• **Categoria Autorizada:** \`${env.allowedCategoryId}\`` : null,
       ]
         .filter(Boolean)

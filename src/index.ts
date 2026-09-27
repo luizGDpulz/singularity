@@ -1,5 +1,10 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   Client,
+  ComponentType,
+  EmbedBuilder,
   Events,
   GatewayIntentBits,
   Partials,
@@ -8,8 +13,10 @@ import { env } from './config/env.js';
 import { discordService } from './services/discord.service.js';
 import { runnerService } from './services/runner.service.js';
 import { workspaceService } from './services/workspace.service.js';
+import { aiSettingsService } from './services/ai-settings.service.js';
 import {
   handleAiSelectInteraction,
+  handleAutocomplete,
   handleSingularityCommand,
   singularityCommand,
 } from './commands/singularity.command.js';
@@ -46,10 +53,12 @@ client.once(Events.ClientReady, async (readyClient) => {
   console.log('================================================================================');
 });
 
-// Slash Command & Component Dispatcher
+// Slash Command, Autocomplete, and Component Dispatcher
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    if (interaction.isChatInputCommand() && interaction.commandName === 'singularity') {
+    if (interaction.isAutocomplete() && interaction.commandName === 'singularity') {
+      await handleAutocomplete(interaction);
+    } else if (interaction.isChatInputCommand() && interaction.commandName === 'singularity') {
       await handleSingularityCommand(interaction);
     } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith('singularity_select_')) {
       await handleAiSelectInteraction(interaction);
@@ -119,14 +128,83 @@ client.on(Events.MessageCreate, async (message) => {
       `📥 [Inbound Task] Channel: #${context.channelName} (${context.channelId}) | Mode: ${modeLabel} | Workspace: ${context.targetWorkspace}`
     );
 
-    // 5. Execute task through the runner engine
+    // 5. Interactive Permission Check (if permissionMode is 'ask')
+    const aiSettings = aiSettingsService.getSettings();
+    if (aiSettings.permissionMode === 'ask') {
+      const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('confirm_exec')
+          .setLabel('Aprovar e Executar')
+          .setStyle(ButtonStyle.Success)
+          .setEmoji('✅'),
+        new ButtonBuilder()
+          .setCustomId('cancel_exec')
+          .setLabel('Cancelar')
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji('❌')
+      );
+
+      const promptPreview = rawContent.length > 200 ? `${rawContent.slice(0, 197)}...` : rawContent;
+      const confirmEmbed = new EmbedBuilder()
+        .setColor(0xeab308)
+        .setTitle('🛡️ Solicitação de Execução no Workspace')
+        .setDescription(`**Prompt:**\n> ${promptPreview}`)
+        .addFields(
+          { name: '📁 Workspace', value: `\`${context.targetWorkspace}\``, inline: true },
+          {
+            name: '🤖 Modelo / Raciocínio',
+            value: `\`${aiSettingsService.getModelName()}\` (\`${aiSettings.effort.toUpperCase()}\`)`,
+            inline: true,
+          }
+        )
+        .setFooter({ text: 'Aguardando sua confirmação (expira em 60s)...' });
+
+      const promptMsg = await message.reply({
+        embeds: [confirmEmbed],
+        components: [confirmRow],
+      });
+
+      try {
+        const confirmation = await promptMsg.awaitMessageComponent({
+          filter: (i) => i.user.id === env.allowedUserId,
+          componentType: ComponentType.Button,
+          time: 60000,
+        });
+
+        if (confirmation.customId === 'cancel_exec') {
+          await confirmation.update({
+            content: '❌ **Execução cancelada por você.**',
+            embeds: [],
+            components: [],
+          });
+          return;
+        }
+
+        // Approved! Update card and proceed
+        await confirmation.update({
+          content: '⏳ **Execução aprovada! Processando...**',
+          embeds: [],
+          components: [],
+        });
+      } catch {
+        // Timed out
+        await promptMsg.edit({
+          content: '⏱️ **Tempo de confirmação expirado.** Tarefa cancelada.',
+          embeds: [],
+          components: [],
+        });
+        return;
+      }
+    }
+
+    // 6. Execute task through the runner engine
     const result = await runnerService.runTask({
       channel: message.channel,
       prompt: context.aggregatedPrompt,
       targetWorkspace: context.targetWorkspace,
     });
 
-    // 6. Deliver output back to the specific thread or channel
+    // 7. Deliver output back to the specific thread or channel
     const header = runnerService.formatHeader(result, context.targetWorkspace);
     const content = result.stdout || result.stderr || '[No output produced by process]';
 
