@@ -41,6 +41,7 @@ export interface ExecutionResult {
   exitCode: number | null;
   failed: boolean;
   timedOut: boolean;
+  cancelled?: boolean;
   durationMs: number;
   command: string;
   error?: Error | unknown;

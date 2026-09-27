@@ -24,6 +24,7 @@ import {
   type ReasoningEffort,
 } from '../services/ai-settings.service.js';
 import { workspaceService } from '../services/workspace.service.js';
+import { runnerService } from '../services/runner.service.js';
 
 export const singularityCommand = new SlashCommandBuilder()
   .setName('singularity')
@@ -92,6 +93,12 @@ export const singularityCommand = new SlashCommandBuilder()
     sub
       .setName('unmap')
       .setDescription('Remove explicit mapping from current channel and restore auto-sandbox mode')
+  )
+  // Subcommand: cancel
+  .addSubcommand((sub) =>
+    sub
+      .setName('cancel')
+      .setDescription('Interrompe a execução ativa da IA no canal atual')
   )
   // Subcommand: list
   .addSubcommand((sub) =>
@@ -655,6 +662,24 @@ export async function handleSingularityCommand(
           flags: MessageFlags.Ephemeral,
         });
       }
+      break;
+    }
+
+    case 'cancel': {
+      const isRunning = runnerService.isTaskRunning(channelId);
+      if (!isRunning) {
+        await interaction.reply({
+          content: 'ℹ️ **Nenhuma tarefa em execução neste canal para cancelar.**',
+          flags: MessageFlags.Ephemeral,
+        });
+        break;
+      }
+
+      runnerService.cancelTask(channelId);
+      await interaction.reply({
+        content: '🛑 **Cancelamento solicitado com sucesso!** Interrompendo processo da IA...',
+        flags: MessageFlags.Ephemeral,
+      });
       break;
     }
 

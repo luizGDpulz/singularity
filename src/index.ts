@@ -72,6 +72,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleAiSelectInteraction(interaction);
     } else if (interaction.isButton() && interaction.customId === 'singularity_btn_map_manual') {
       await handleMapManualButton(interaction);
+    } else if (interaction.isButton() && interaction.customId === 'singularity_btn_cancel_task') {
+      if (interaction.user.id !== env.allowedUserId) {
+        await interaction.reply({
+          content: '⛔ Apenas o proprietário autorizado pode cancelar tarefas.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const channelId = interaction.channelId;
+      const cancelled = channelId ? runnerService.cancelTask(channelId) : false;
+      if (cancelled) {
+        await interaction.reply({
+          content: '🛑 **Cancelamento solicitado.** Interrompendo a execução...',
+          flags: MessageFlags.Ephemeral,
+        });
+      } else {
+        await interaction.reply({
+          content: 'ℹ️ Nenhuma tarefa em execução neste canal para cancelar.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
     } else if (interaction.isButton() && interaction.customId.startsWith('singularity_btn_')) {
       await handleAiButtonInteraction(interaction);
     } else if (
@@ -231,28 +252,92 @@ client.on(Events.MessageCreate, async (message) => {
       }
     }
 
-    // 6. Execute task through the runner engine
+    // 6. Interactive Live Status & Cancel Card
+    let statusMsg: Message | null = promptMsg;
+    const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('singularity_btn_cancel_task')
+        .setLabel('Cancelar Tarefa')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🛑')
+    );
+
+    const buildStatusEmbed = (elapsedSeconds: number, actionText: string) => {
+      const promptPreview = rawContent.length > 150 ? `${rawContent.slice(0, 147)}...` : rawContent;
+      return new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle('⚙️ Singularity — Processando Tarefa...')
+        .setDescription(`> ${promptPreview}`)
+        .addFields(
+          { name: '📁 Workspace', value: `\`${context.targetWorkspace}\``, inline: true },
+          {
+            name: '🤖 Modelo',
+            value: `\`${aiSettingsService.getModelName()}\` ${
+              aiSettingsService.getSupportedEfforts().length > 0 ? `(\`${aiSettings.effort.toUpperCase()}\`)` : ''
+            }`,
+            inline: true,
+          },
+          { name: '⏱️ Tempo Decorrido', value: `\`${elapsedSeconds}s\``, inline: true },
+          { name: '📝 Status Atual', value: actionText ? `\`${actionText.slice(0, 120)}\`` : '🧠 Raciocinando...', inline: false }
+        )
+        .setFooter({ text: 'Clique em Cancelar para interromper o processo.' });
+    };
+
+    if (!statusMsg) {
+      statusMsg = await message.reply({
+        embeds: [buildStatusEmbed(0, '🧠 Inicializando raciocínio...')],
+        components: [cancelRow],
+      });
+    } else {
+      await statusMsg
+        .edit({
+          embeds: [buildStatusEmbed(0, '🧠 Inicializando raciocínio...')],
+          components: [cancelRow],
+        })
+        .catch(() => {});
+    }
+
+    // 7. Execute task through the runner engine with live progress
     const result = await runnerService.runTask({
       channel: message.channel,
       prompt: context.aggregatedPrompt,
       targetWorkspace: context.targetWorkspace,
+      onProgress: async ({ elapsedSeconds, latestAction }) => {
+        if (statusMsg) {
+          await statusMsg
+            .edit({
+              embeds: [buildStatusEmbed(elapsedSeconds, latestAction || '🧠 Processando...')],
+              components: [cancelRow],
+            })
+            .catch(() => {});
+        }
+      },
     });
 
-    // 7. Update confirmation prompt card status if interactive approval was used
-    if (promptMsg) {
-      const durationSeconds = (result.durationMs / 1000).toFixed(1);
-      if (result.failed) {
-        await promptMsg
+    const durationSeconds = (result.durationMs / 1000).toFixed(1);
+
+    // 8. Update status message
+    if (statusMsg) {
+      if (result.cancelled) {
+        await statusMsg
           .edit({
-            content: `❌ **Falha na execução** (${durationSeconds}s)`,
+            content: `🛑 **Tarefa cancelada pelo usuário após ${durationSeconds}s.**`,
+            embeds: [],
+            components: [],
+          })
+          .catch(() => {});
+      } else if (result.failed) {
+        await statusMsg
+          .edit({
+            content: `❌ **Falha na execução após ${durationSeconds}s** (\`${context.targetWorkspace}\`)`,
             embeds: [],
             components: [],
           })
           .catch(() => {});
       } else {
-        await promptMsg
+        await statusMsg
           .edit({
-            content: `⚡ **Executado em ${durationSeconds}s** (\`${context.targetWorkspace}\`)`,
+            content: `⚡ **Executado em ${durationSeconds}s** • \`${aiSettingsService.getModelName()}\` • \`${context.targetWorkspace}\``,
             embeds: [],
             components: [],
           })
@@ -260,7 +345,11 @@ client.on(Events.MessageCreate, async (message) => {
       }
     }
 
-    // 8. Deliver output back to the specific thread or channel
+    // 9. Deliver output back to the specific thread or channel
+    if (result.cancelled) {
+      return;
+    }
+
     if (result.failed) {
       const header = runnerService.formatHeader(result, context.targetWorkspace);
       const content = result.stderr || result.stdout || '[Process exited with an error]';
@@ -268,17 +357,23 @@ client.on(Events.MessageCreate, async (message) => {
         isError: true,
         header,
         workspaceDir: context.targetWorkspace,
+        durationMs: result.durationMs,
+        modelName: aiSettingsService.getModelName(),
+        effort: aiSettings.effort,
       });
     } else {
       const content = result.stdout || result.stderr || '[No output produced by process]';
       await discordService.sendExecutionOutput(message.channel, content, {
         isError: false,
         workspaceDir: context.targetWorkspace,
+        durationMs: result.durationMs,
+        modelName: aiSettingsService.getModelName(),
+        effort: aiSettings.effort,
       });
     }
 
     console.log(
-      `📤 [Task Complete] Succeeded: ${!result.failed} | Duration: ${(result.durationMs / 1000).toFixed(1)}s`
+      `📤 [Task Complete] Succeeded: ${!result.failed} | Duration: ${durationSeconds}s`
     );
   } catch (error) {
     console.error('❌ [Error] Unhandled exception during message processing:', error);

@@ -16,6 +16,9 @@ export interface SendOutputOptions {
   header?: string;
   isError?: boolean;
   workspaceDir?: string;
+  durationMs?: number;
+  modelName?: string;
+  effort?: string;
 }
 
 export class DiscordService {
@@ -27,8 +30,9 @@ export class DiscordService {
 
   /**
    * Threshold in characters beyond which output is attached as a file rather than split.
+   * Set high (45,000 chars) to allow long responses to be delivered in native Discord chunks.
    */
-  public static readonly ATTACHMENT_THRESHOLD = 6000;
+  public static readonly ATTACHMENT_THRESHOLD = 45000;
 
   /**
    * Resolves the workspace context, thread relationship, and fetches recent thread history.
@@ -336,8 +340,24 @@ export class DiscordService {
       return;
     }
 
+    // Build optional execution metrics footer (e.g. ⚡ 14.2s • Gemini 2.5 Pro (HIGH) • /srv/src/secullum-vms)
+    let outputWithFooter = cleanOutput;
+    const metricsParts: string[] = [];
+    if (opts.durationMs !== undefined && opts.durationMs > 0) {
+      metricsParts.push(`⚡ **${(opts.durationMs / 1000).toFixed(1)}s**`);
+    }
+    if (opts.modelName) {
+      metricsParts.push(`**${opts.modelName}**${opts.effort ? ` (\`${opts.effort.toUpperCase()}\`)` : ''}`);
+    }
+    if (opts.workspaceDir) {
+      metricsParts.push(`\`${opts.workspaceDir}\``);
+    }
+    if (metricsParts.length > 0) {
+      outputWithFooter = `${cleanOutput}\n\n───────────────────────────────────────\n${metricsParts.join(' • ')}`;
+    }
+
     // Normal markdown delivery: split into clean markdown chunks (<= 1950 chars)
-    const mdChunks = this.splitMarkdownChunks(cleanOutput, 1950);
+    const mdChunks = this.splitMarkdownChunks(outputWithFooter, 1950);
     for (const chunk of mdChunks) {
       await channel.send(chunk);
     }
