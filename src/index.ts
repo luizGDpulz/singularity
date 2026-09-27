@@ -7,6 +7,7 @@ import {
   EmbedBuilder,
   Events,
   GatewayIntentBits,
+  MessageFlags,
   Partials,
 } from 'discord.js';
 import { env } from './config/env.js';
@@ -73,7 +74,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.user.id !== env.allowedUserId) {
         await interaction.reply({
           content: '⛔ Apenas o proprietário autorizado pode aprovar ou cancelar execuções.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
       // Note: Authorized user clicks are collected by promptMsg.awaitMessageComponent
@@ -86,9 +87,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.isRepliable()) {
         const errorMsg = '🚨 Ocorreu um erro ao processar a interação.';
         if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({ content: errorMsg, ephemeral: true });
+          await interaction.followUp({ content: errorMsg, flags: MessageFlags.Ephemeral });
         } else {
-          await interaction.reply({ content: errorMsg, ephemeral: true });
+          await interaction.reply({ content: errorMsg, flags: MessageFlags.Ephemeral });
         }
       }
     } catch {

@@ -6,6 +6,7 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  MessageFlags,
   ModalBuilder,
   ModalSubmitInteraction,
   SlashCommandBuilder,
@@ -220,7 +221,6 @@ export function buildAiSettingsPanel() {
   return {
     embeds: [embed],
     components: [row1, row2],
-    ephemeral: true,
   };
 }
 
@@ -233,7 +233,7 @@ export async function handleAiSelectInteraction(
   if (interaction.user.id !== env.allowedUserId) {
     await interaction.reply({
       content: '⛔ Acesso negado.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -257,7 +257,7 @@ export async function handleAiButtonInteraction(
   interaction: ButtonInteraction
 ): Promise<void> {
   if (interaction.user.id !== env.allowedUserId) {
-    await interaction.reply({ content: '⛔ Acesso negado.', ephemeral: true });
+    await interaction.reply({ content: '⛔ Acesso negado.', flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -279,7 +279,7 @@ export async function handleAiButtonInteraction(
     if (quotas.length === 0) {
       await interaction.followUp({
         content: '⚠️ Não foi possível obter as cotas do `agy` no momento.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -301,7 +301,7 @@ export async function handleAiButtonInteraction(
       )
       .setTimestamp();
 
-    await interaction.followUp({ embeds: [quotaEmbed], ephemeral: true });
+    await interaction.followUp({ embeds: [quotaEmbed], flags: MessageFlags.Ephemeral });
   }
 }
 
@@ -310,13 +310,13 @@ export async function handleAiButtonInteraction(
  */
 export async function handleMapModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
   if (interaction.user.id !== env.allowedUserId) {
-    await interaction.reply({ content: '⛔ Acesso negado.', ephemeral: true });
+    await interaction.reply({ content: '⛔ Acesso negado.', flags: MessageFlags.Ephemeral });
     return;
   }
 
   const channelId = interaction.channelId;
   if (!channelId) {
-    await interaction.reply({ content: '❌ Não foi possível identificar o canal.', ephemeral: true });
+    await interaction.reply({ content: '❌ Não foi possível identificar o canal.', flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -328,7 +328,7 @@ export async function handleMapModalSubmit(interaction: ModalSubmitInteraction):
 
   await interaction.reply({
     content: `✅ **Workspace Mapeado com Sucesso via Modal!**\n• **Canal:** \`#${channelName}\`\n• **Diretório Vinculado:** \`${resolved}\`\n\nTodos os comandos neste canal/thread serão executados nesta pasta.`,
-    ephemeral: true,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -342,7 +342,7 @@ export async function handleSingularityCommand(
   if (interaction.user.id !== env.allowedUserId) {
     await interaction.reply({
       content: '⛔ **Access Denied:** Only the authorized owner can execute Singularity administration commands.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -353,7 +353,7 @@ export async function handleSingularityCommand(
   if (!channel) {
     await interaction.reply({
       content: '❌ Unable to resolve channel for this interaction.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -363,7 +363,7 @@ export async function handleSingularityCommand(
 
   switch (subcommand) {
     case 'usage': {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const quotas = await aiSettingsService.fetchUsageQuota(env.commandPrefixBin);
 
@@ -437,10 +437,16 @@ export async function handleSingularityCommand(
       if (changedSomething) {
         await interaction.reply({
           content: '✅ **Configurações atualizadas com sucesso!**',
-          ...panel,
+          embeds: panel.embeds,
+          components: panel.components,
+          flags: MessageFlags.Ephemeral,
         });
       } else {
-        await interaction.reply(panel);
+        await interaction.reply({
+          embeds: panel.embeds,
+          components: panel.components,
+          flags: MessageFlags.Ephemeral,
+        });
       }
       break;
     }
@@ -476,7 +482,7 @@ export async function handleSingularityCommand(
         .filter(Boolean)
         .join('\n');
 
-      await interaction.reply({ content: response, ephemeral: true });
+      await interaction.reply({ content: response, flags: MessageFlags.Ephemeral });
       break;
     }
 
@@ -514,12 +520,12 @@ export async function handleSingularityCommand(
         });
         await interaction.reply({
           content: `🔓 **Canal Desvinculado!**\nRetornou para o modo **Auto-Sandbox**.\n• **Diretório Ativo:** \`${auto.path}\``,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       } else {
         await interaction.reply({
           content: `ℹ️ **O canal não estava mapeado manualmente.** Já está operando no modo Auto-Sandbox.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
       break;
@@ -532,7 +538,7 @@ export async function handleSingularityCommand(
       if (entries.length === 0) {
         await interaction.reply({
           content: `📁 **Nenhum mapeamento manual registrado.**\nTodos os canais na categoria operam em modo **Auto-Sandbox** (sob \`${env.autoWorkspacesRoot}\`).`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -543,7 +549,7 @@ export async function handleSingularityCommand(
 
       await interaction.reply({
         content: `### 📋 Mapeamentos Manuais de Workspace (${entries.length})\n${formatted}\n\n*Os demais canais na categoria autorizada operam em modo Auto-Sandbox.*`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       break;
     }
@@ -551,7 +557,7 @@ export async function handleSingularityCommand(
     default:
       await interaction.reply({
         content: '❓ Subcomando desconhecido.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
   }
 }
