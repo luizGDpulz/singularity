@@ -3,10 +3,14 @@ import {
   AutocompleteInteraction,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  ModalBuilder,
+  ModalSubmitInteraction,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuInteraction,
   StringSelectMenuOptionBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from 'discord.js';
 import { env } from '../config/env.js';
 import {
@@ -25,6 +29,12 @@ export const singularityCommand = new SlashCommandBuilder()
     sub
       .setName('info')
       .setDescription('View current channel workspace path, mode, and CLI configuration')
+  )
+  // Subcommand: usage (Real-time quota monitoring)
+  .addSubcommand((sub) =>
+    sub
+      .setName('usage')
+      .setDescription('View live Antigravity API quotas and rate limits (Gemini, Claude, GPT)')
   )
   // Subcommand: config (Unified AI, effort, and permissions panel with autocomplete)
   .addSubcommand((sub) =>
@@ -61,17 +71,11 @@ export const singularityCommand = new SlashCommandBuilder()
           )
       )
   )
-  // Subcommand: map
+  // Subcommand: map (Native Discord Modal popup)
   .addSubcommand((sub) =>
     sub
       .setName('map')
-      .setDescription('Explicitly bind the current channel to an existing project directory')
-      .addStringOption((opt) =>
-        opt
-          .setName('path')
-          .setDescription('Absolute or relative directory path on the host')
-          .setRequired(true)
-      )
+      .setDescription('Open the workspace mapping popup window to bind this channel')
   )
   // Subcommand: unmap
   .addSubcommand((sub) =>
@@ -249,6 +253,33 @@ export async function handleAiSelectInteraction(
 }
 
 /**
+ * Handles submission of the /singularity map Modal popup.
+ */
+export async function handleMapModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  if (interaction.user.id !== env.allowedUserId) {
+    await interaction.reply({ content: '⛔ Acesso negado.', ephemeral: true });
+    return;
+  }
+
+  const channelId = interaction.channelId;
+  if (!channelId) {
+    await interaction.reply({ content: '❌ Não foi possível identificar o canal.', ephemeral: true });
+    return;
+  }
+
+  const targetPath = interaction.fields.getTextInputValue('workspace_path').trim();
+  const channel = interaction.channel;
+  const channelName = channel && 'name' in channel ? channel.name : channelId;
+
+  const resolved = workspaceService.setManualMapping(channelId, targetPath);
+
+  await interaction.reply({
+    content: `✅ **Workspace Mapeado com Sucesso via Modal!**\n• **Canal:** \`#${channelName}\`\n• **Diretório Vinculado:** \`${resolved}\`\n\nTodos os comandos neste canal/thread serão executados nesta pasta.`,
+    ephemeral: true,
+  });
+}
+
+/**
  * Handles /singularity slash command interactions.
  */
 export async function handleSingularityCommand(
@@ -278,6 +309,58 @@ export async function handleSingularityCommand(
   const channelName = 'name' in channel ? channel.name : channelId;
 
   switch (subcommand) {
+    case 'usage': {
+      await interaction.deferReply({ ephemeral: true });
+
+      const quotas = await aiSettingsService.fetchUsageQuota(env.commandPrefixBin);
+
+      if (quotas.length === 0) {
+        await interaction.editReply({
+          content: '⚠️ Não foi possível obter os dados de cota no momento. Verifique se o `agy` está online.',
+        });
+        return;
+      }
+
+      // Group quotas by model family
+      const geminiQuotas = quotas.filter((q) => q.group.toLowerCase().includes('gemini'));
+      const claudeGptQuotas = quotas.filter((q) => !q.group.toLowerCase().includes('gemini'));
+
+      const formatQuotaField = (items: typeof quotas) => {
+        return items
+          .map((item) => {
+            const bar = aiSettingsService.renderProgressBar(item.percent);
+            const resetInfo = item.resetDate ? `\n  *(Reseta em: <t:${Math.floor(new Date(item.resetDate).getTime() / 1000)}:R>)*` : '';
+            return `• **${item.metric}:**\n  \`${bar}\`${resetInfo}`;
+          })
+          .join('\n\n');
+      };
+
+      const embed = new EmbedBuilder()
+        .setColor(0x22c55e)
+        .setTitle('📊 Singularity — Quotas & Limites de Uso (Antigravity)')
+        .setDescription('Acompanhamento em tempo real das cotas semanais e da janela de 5 horas.')
+        .setTimestamp();
+
+      if (geminiQuotas.length > 0) {
+        embed.addFields({
+          name: '🟢 Gemini Models Quota',
+          value: formatQuotaField(geminiQuotas),
+          inline: false,
+        });
+      }
+
+      if (claudeGptQuotas.length > 0) {
+        embed.addFields({
+          name: '🟡 Claude & GPT Models Quota',
+          value: formatQuotaField(claudeGptQuotas),
+          inline: false,
+        });
+      }
+
+      await interaction.editReply({ embeds: [embed] });
+      break;
+    }
+
     case 'config': {
       const explicitModel = interaction.options.getString('model');
       const explicitEffort = interaction.options.getString('effort') as ReasoningEffort | null;
@@ -345,13 +428,25 @@ export async function handleSingularityCommand(
     }
 
     case 'map': {
-      const targetPath = interaction.options.getString('path', true).trim();
-      const resolved = workspaceService.setManualMapping(channelId, targetPath);
+      // Open native Discord Modal window!
+      const currentMapping = workspaceService.listManualMappings()[channelId] || '';
 
-      await interaction.reply({
-        content: `✅ **Canal Mapeado com Sucesso!**\n• **Canal:** \`#${channelName}\`\n• **Diretório Vinculado:** \`${resolved}\`\n\nTodos os comandos neste canal/thread serão executados nesta pasta.`,
-        ephemeral: true,
-      });
+      const modal = new ModalBuilder()
+        .setCustomId('singularity_map_modal')
+        .setTitle('📁 Mapear Workspace do Projeto');
+
+      const pathInput = new TextInputBuilder()
+        .setCustomId('workspace_path')
+        .setLabel('Caminho do Diretório (Host / VPS)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Ex: C:/Projects/meu-app ou /workspace/app')
+        .setValue(currentMapping)
+        .setRequired(true);
+
+      const row = new ActionRowBuilder<TextInputBuilder>().addComponents(pathInput);
+      modal.addComponents(row);
+
+      await interaction.showModal(modal);
       break;
     }
 

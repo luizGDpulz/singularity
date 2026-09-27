@@ -17,6 +17,7 @@ import { aiSettingsService } from './services/ai-settings.service.js';
 import {
   handleAiSelectInteraction,
   handleAutocomplete,
+  handleMapModalSubmit,
   handleSingularityCommand,
   singularityCommand,
 } from './commands/singularity.command.js';
@@ -62,6 +63,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleSingularityCommand(interaction);
     } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith('singularity_select_')) {
       await handleAiSelectInteraction(interaction);
+    } else if (interaction.isModalSubmit() && interaction.customId === 'singularity_map_modal') {
+      await handleMapModalSubmit(interaction);
     }
   } catch (err) {
     console.error('❌ [Interaction Error]', err);

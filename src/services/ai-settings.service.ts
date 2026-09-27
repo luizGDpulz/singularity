@@ -200,6 +200,59 @@ export class AiSettingsService {
       fullArgs: [...baseArgs, prompt],
     };
   }
+
+  /**
+   * Fetches real-time usage quotas from agy via `/usage`.
+   */
+  public async fetchUsageQuota(commandPrefixBin: string): Promise<Array<{ group: string; metric: string; percent: number; resetDate: string }>> {
+    const parts = commandPrefixBin.trim().split(/\s+/);
+    const binary = parts[0] || 'agy';
+    const isAgy = binary.toLowerCase().includes('agy') || parts.some((p) => p.toLowerCase().includes('agy'));
+
+    if (!isAgy) {
+      return [];
+    }
+
+    try {
+      const { execa } = await import('execa');
+      const result = await execa(binary, ['-p', '/usage'], { timeout: 15000, reject: false });
+      if (result.exitCode !== 0 || !result.stdout) {
+        return [];
+      }
+
+      const lines = result.stdout.trim().split('\n');
+      const quotas: Array<{ group: string; metric: string; percent: number; resetDate: string }> = [];
+
+      for (const line of lines) {
+        const parts = line.split('\t');
+        if (parts.length >= 3) {
+          const group = parts[0]?.trim() || '';
+          const metric = parts[1]?.trim() || '';
+          const percentStr = parts[2]?.replace('%', '').trim() || '0';
+          const resetDate = parts[3]?.trim() || '';
+          const percent = Number.parseFloat(percentStr) || 0;
+
+          quotas.push({ group, metric, percent, resetDate });
+        }
+      }
+
+      return quotas;
+    } catch (err) {
+      console.error('⚠️ [AiSettings] Failed to fetch /usage quota from agy:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Renders a clean ASCII visual progress bar for Discord embeds.
+   */
+  public renderProgressBar(percent: number, totalBlocks: number = 14): string {
+    const clamped = Math.max(0, Math.min(100, percent));
+    const filledBlocks = Math.round((clamped / 100) * totalBlocks);
+    const emptyBlocks = totalBlocks - filledBlocks;
+    const bar = '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
+    return `[${bar}] ${clamped}%`;
+  }
 }
 
 export const aiSettingsService = new AiSettingsService();
