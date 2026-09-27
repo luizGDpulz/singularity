@@ -66,6 +66,10 @@ if ($reconfigure) {
     $mappings = Read-Host "🗺️ Mapeamentos fixos JSON [Padrão: {}]"
     if ([string]::IsNullOrWhiteSpace($mappings)) { $mappings = "{}" }
 
+    # Auto workspaces root
+    $autoRoot = Read-Host "📂 Diretório raiz para Auto-Sandboxes [Padrão: workspaces]"
+    if ([string]::IsNullOrWhiteSpace($autoRoot)) { $autoRoot = "workspaces" }
+
     # Timeout
     $timeout = Read-Host "⏱️ Timeout de execução em ms [Padrão: 600000 = 10min]"
     if ([string]::IsNullOrWhiteSpace($timeout)) { $timeout = "600000" }
@@ -82,7 +86,7 @@ COMMAND_PREFIX_BIN=$cmdPrefix
 EXECUTION_TIMEOUT_MS=$timeout
 MAX_BUFFER_BYTES=15728640
 TYPING_INTERVAL_MS=7000
-AUTO_WORKSPACES_ROOT=workspaces
+AUTO_WORKSPACES_ROOT=$autoRoot
 "@
 
     Set-Content -Path $envPath -Value $envContent -Encoding UTF8

@@ -87,8 +87,7 @@ if [ "$RECONFIGURE" = true ]; then
 
     # 1. DISCORD_TOKEN
     while true; do
-        read -rsp "🔑 Discord Bot Token (Developer Portal): " INPUT_DISCORD_TOKEN
-        echo
+        read -rp "🔑 Discord Bot Token (Developer Portal): " INPUT_DISCORD_TOKEN
         if [ -n "$INPUT_DISCORD_TOKEN" ]; then
             break
         fi
@@ -118,7 +117,11 @@ if [ "$RECONFIGURE" = true ]; then
     read -rp "🗺️ Mapeamentos fixos de workspace JSON [Padrão: {}]: " INPUT_WORKSPACE_MAPPINGS
     WORKSPACE_MAPPINGS="${INPUT_WORKSPACE_MAPPINGS:-{}}"
 
-    # 6. EXECUTION_TIMEOUT_MS
+    # 6. AUTO_WORKSPACES_ROOT
+    read -rp "📂 Diretório raiz para Auto-Sandboxes [Padrão: workspaces]: " INPUT_AUTO_ROOT
+    AUTO_WORKSPACES_ROOT="${INPUT_AUTO_ROOT:-workspaces}"
+
+    # 7. EXECUTION_TIMEOUT_MS
     read -rp "⏱️ Timeout de execução em milissegundos [Padrão: 600000 = 10min]: " INPUT_TIMEOUT
     EXECUTION_TIMEOUT_MS="${INPUT_TIMEOUT:-600000}"
 
@@ -137,7 +140,7 @@ COMMAND_PREFIX_BIN=${COMMAND_PREFIX_BIN}
 EXECUTION_TIMEOUT_MS=${EXECUTION_TIMEOUT_MS}
 MAX_BUFFER_BYTES=15728640
 TYPING_INTERVAL_MS=7000
-AUTO_WORKSPACES_ROOT=workspaces
+AUTO_WORKSPACES_ROOT=${AUTO_WORKSPACES_ROOT}
 EOF
 
     chmod 600 "$ENV_FILE"
