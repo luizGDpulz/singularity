@@ -261,11 +261,13 @@ client.on(Events.MessageCreate, async (message) => {
       await discordService.sendExecutionOutput(message.channel, content, {
         isError: true,
         header,
+        workspaceDir: context.targetWorkspace,
       });
     } else {
       const content = result.stdout || result.stderr || '[No output produced by process]';
       await discordService.sendExecutionOutput(message.channel, content, {
         isError: false,
+        workspaceDir: context.targetWorkspace,
       });
     }
 

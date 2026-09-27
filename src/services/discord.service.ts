@@ -4,12 +4,19 @@ import {
   type ThreadChannel,
 } from 'discord.js';
 import { env } from '../config/env.js';
+import { gitService } from './git.service.js';
 import { workspaceService } from './workspace.service.js';
 import type {
   ContextResolution,
   ConversationMessage,
   SendableChannel,
 } from '../types/index.js';
+
+export interface SendOutputOptions {
+  header?: string;
+  isError?: boolean;
+  workspaceDir?: string;
+}
 
 export class DiscordService {
   /**
@@ -252,14 +259,19 @@ export class DiscordService {
   public async sendExecutionOutput(
     channel: SendableChannel,
     output: string,
-    options: { header?: string; isError?: boolean } | string = {}
+    options: SendOutputOptions | string = {}
   ): Promise<void> {
     const opts = typeof options === 'string' ? { header: options, isError: false } : options;
     const isError = Boolean(opts.isError);
     const headerPrefix = opts.header ? `${opts.header}\n` : '';
 
     // Strip ANSI color codes
-    const cleanOutput = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+    let cleanOutput = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+
+    // Transform unclickable file:// links into clickable GitHub URLs or clean inline code badges
+    if (!isError && cleanOutput) {
+      cleanOutput = gitService.transformFileLinks(cleanOutput, opts.workspaceDir);
+    }
 
     if (!cleanOutput) {
       if (isError) {
@@ -340,6 +352,13 @@ export class DiscordService {
     const slice = text.slice(-maxPreviewChars);
     const firstNewlineIndex = slice.indexOf('\n');
     return firstNewlineIndex !== -1 ? `... [truncated]\n${slice.slice(firstNewlineIndex + 1)}` : `... [truncated]\n${slice}`;
+  }
+
+  /**
+   * Sanitizes markdown text by transforming file:// links to GitHub URLs or inline code badges.
+   */
+  public sanitizeFileLinks(markdown: string, workspaceDir?: string): string {
+    return gitService.transformFileLinks(markdown, workspaceDir);
   }
 }
 

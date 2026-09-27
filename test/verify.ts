@@ -145,6 +145,85 @@ console.assert(mdChunks[0]?.endsWith('```'), 'Chunk 1 must cleanly close the ope
 console.assert(mdChunks[1]?.startsWith('```typescript'), 'Chunk 2 must re-open the code fence with the original language');
 console.log(`✅ Markdown code block fence preservation passed (${mdChunks.length} chunks generated).`);
 
+// 7. Test GitService and File Link Transformation
+console.log('\n--- Testing GitService & Link Transformation ---');
+import { gitService } from '../src/services/git.service.js';
+
+// Remote URL normalization
+const sshNorm = gitService.normalizeGitRemoteToWebUrl('git@github.com:luizGDpulz/singularity.git');
+console.assert(sshNorm === 'https://github.com/luizGDpulz/singularity', 'SSH git remote should convert to HTTPS URL');
+const httpsNorm = gitService.normalizeGitRemoteToWebUrl('https://github.com/luizGDpulz/Mind.git');
+console.assert(httpsNorm === 'https://github.com/luizGDpulz/Mind', 'HTTPS git remote should strip .git');
+console.log('✅ Remote URL normalization passed.');
+
+// Metadata resolution for current repo and Mind
+const singularityMeta = gitService.resolveRepoMeta(process.cwd());
+console.assert(singularityMeta !== null, 'Should resolve repo meta for Singularity');
+console.assert(singularityMeta?.webUrl.includes('github.com/luizGDpulz/singularity'), 'Repo URL should match singularity repo');
+console.log('✅ Singularity Git metadata resolution passed:', singularityMeta?.webUrl);
+
+// URL resolution
+const rootUrl = gitService.resolveWebUrl('file:///C:/Projects/singularity');
+console.assert(rootUrl === 'https://github.com/luizGDpulz/singularity', `Expected repo root URL, got ${rootUrl}`);
+
+const fileUrlWithLines = gitService.resolveWebUrl('file:///C:/Projects/singularity/src/services/workspace.service.ts#L106-L143');
+console.assert(
+  fileUrlWithLines === 'https://github.com/luizGDpulz/singularity/blob/main/src/services/workspace.service.ts#L106-L143',
+  `Expected file URL with lines, got ${fileUrlWithLines}`
+);
+
+const dirUrl = gitService.resolveWebUrl('file:///C:/Projects/singularity/src/services');
+console.assert(
+  dirUrl === 'https://github.com/luizGDpulz/singularity/tree/main/src/services',
+  `Expected directory tree URL, got ${dirUrl}`
+);
+console.log('✅ URL resolution (root, file+lines, directory) passed.');
+
+// Markdown link transformation
+const rawMarkdown = [
+  'Acesso validado tanto no repositório [singularity](file:///C:/Projects/singularity) quanto no Second Brain em [c:\\Mind](file:///C:/Mind).',
+  'O **Singularity** ([`singularity-bridge`](file:///C:/Projects/singularity/package.json)) é um daemon headless.',
+  'Veja a classe [`WorkspaceService`](file:///C:/Projects/singularity/src/services/workspace.service.ts#L106-L143).',
+  'Arquivo temporário sem git: [local.log](file:///C:/tmp/local.log).',
+  '```typescript',
+  'const test = "file:///C:/Projects/singularity";',
+  '```',
+  'Link com backtick no label: [`Padrões`](https://github.com/luizGDpulz/Mind)',
+].join('\n');
+
+const transformedMarkdown = discordService.sanitizeFileLinks(rawMarkdown, 'C:/Projects/singularity');
+
+console.assert(
+  transformedMarkdown.includes('[singularity](https://github.com/luizGDpulz/singularity)'),
+  'Should transform repo root link'
+);
+console.assert(
+  transformedMarkdown.includes('[c:\\Mind](https://github.com/luizGDpulz/Mind)'),
+  'Should transform Mind Second Brain link'
+);
+console.assert(
+  transformedMarkdown.includes('[singularity-bridge](https://github.com/luizGDpulz/singularity/blob/main/package.json)'),
+  'Should strip inner backticks and create clickable GitHub link for package.json'
+);
+console.assert(
+  transformedMarkdown.includes('[WorkspaceService](https://github.com/luizGDpulz/singularity/blob/main/src/services/workspace.service.ts#L106-L143)'),
+  'Should strip inner backticks and create clickable GitHub link with line numbers'
+);
+console.assert(
+  transformedMarkdown.includes('`local.log`'),
+  'Should convert non-git local file link to inline code badge'
+);
+console.assert(
+  transformedMarkdown.includes('const test = "file:///C:/Projects/singularity";'),
+  'Should preserve code blocks untouched'
+);
+console.assert(
+  transformedMarkdown.includes('[Padrões](https://github.com/luizGDpulz/Mind)'),
+  'Should sanitize inner backticks in HTTPS links for Discord compatibility'
+);
+console.log('✅ Full conversational markdown link transformation passed.');
+
 console.log('\n🎉 ALL VERIFICATION TESTS PASSED SUCCESSFULLY!');
+
 
 
