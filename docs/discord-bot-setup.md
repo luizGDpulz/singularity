@@ -52,6 +52,7 @@ O Singularity atua como um ouvinte ambiente em canais e threads. Para ler o cont
 1. No menu lateral, acesse **OAuth2** $\rightarrow$ **URL Generator**.
 2. Na caixa **Scopes**, marque:
    - ✅ `bot`
+   - ✅ `applications.commands` (Obrigatório para habilitar comandos slash como `/singularity`).
 3. Na caixa **Bot Permissions** que se abre abaixo, selecione as seguintes permissões:
    - ✅ **View Channels** (`Visualizar canais`)
    - ✅ **Send Messages** (`Enviar mensagens`)
@@ -77,10 +78,14 @@ O Singularity utiliza um modelo de segurança *Zero-Trust*, respondendo exclusiv
 2. Clique em **Copiar ID de Usuário** (*Copy User ID*).
 3. Este número longo (ex: `123456789012345678`) é o seu `ALLOWED_USER_ID`.
 
-### Pegando os IDs dos Canais para `WORKSPACE_MAPPINGS`:
-1. Crie uma categoria ou canal de texto dedicado para o seu projeto (ex: `#project-alpha`).
-2. Clique com o botão direito sobre o canal e selecione **Copiar ID do Canal** (*Copy Channel ID*).
-3. Este ID será a chave no JSON de mapeamento apontando para a pasta física do projeto na sua máquina ou VPS.
+### Pegando o ID da Categoria para `ALLOWED_CATEGORY_ID` (Recomendado - Modo Auto-Sandbox):
+1. Crie uma categoria no seu servidor (ex: `✨Ai Chat` ou `Projetos`).
+2. Clique com o botão direito sobre o título da categoria e selecione **Copiar ID da Categoria** (*Copy Category ID*).
+3. Qualquer canal ou thread criado dentro desta categoria terá auto-sandbox gerado automaticamente em `./workspaces/<nome-do-canal>`, sem necessidade de configuração prévia.
+
+### Pegando os IDs dos Canais para `WORKSPACE_MAPPINGS` (Projetos Pré-Existentes):
+1. Se você tem pastas fixas no host que deseja vincular a canais específicos, clique com o botão direito sobre o canal e selecione **Copiar ID do Canal** (*Copy Channel ID*).
+2. Este ID será a chave no JSON de mapeamento apontando para a pasta física do projeto na sua máquina ou VPS.
 
 ---
 
@@ -95,11 +100,14 @@ DISCORD_TOKEN=MTE5OTk4NzY1NDMyMTA5ODc2NQ.GxYz...
 # Seu Snowflake ID pessoal
 ALLOWED_USER_ID=123456789012345678
 
-# Mapeamento do ID do canal para a pasta absoluta do projeto
+# (Recomendado) Categoria onde todos os novos chats criam workspaces automáticos
+ALLOWED_CATEGORY_ID=987654321098765432
+
+# Mapeamentos fixos opcionais (ID do canal -> Pasta absoluta do host)
 WORKSPACE_MAPPINGS={"123456789012345678":"/workspace/project-alpha"}
 
-# Comando padrão a executar no workspace
-COMMAND_PREFIX_BIN=antigravity run
+# Comando padrão a executar no workspace (ou agy -p)
+COMMAND_PREFIX_BIN=agy -p
 ```
 
 Pronto! Seu bot está registrado, autorizado e pronto para ser conectado ao daemon do Singularity.

@@ -44,7 +44,10 @@ DISCORD_TOKEN=MTE5OTk4NzY1NDMyMTA5ODc2NQ.GxYz...
 # Seu Discord Snowflake ID (Apenas mensagens deste ID serão processadas)
 ALLOWED_USER_ID=123456789012345678
 
-# Mapeamento estrito: ID do Canal/Thread Pai -> Caminho Absoluto do Workspace
+# (Recomendado) Categoria onde todos os novos canais criam auto-sandboxes isolados
+ALLOWED_CATEGORY_ID=987654321098765432
+
+# Mapeamentos fixos opcionais: ID do Canal/Thread Pai -> Caminho Absoluto do Workspace
 # No Linux / Docker:
 WORKSPACE_MAPPINGS={"123456789012345678":"/workspace/meu-projeto"}
 # No Windows local (use barras normais ou escapadas):
@@ -160,25 +163,45 @@ docker compose down
 
 Uma vez que o bot esteja online (você verá o status no terminal e o bot verde no Discord):
 
-### Uso em Canais Regulares
-- Entre no canal cujo ID foi cadastrado em `WORKSPACE_MAPPINGS`.
-- Digite uma instrução:
-  > *"Adicione validação de email no endpoint de login e rode os testes"*
-- O bot ativará o indicador **"digitando..."** a cada 7 segundos enquanto a CLI roda no workspace correspondente.
-- Assim que o comando finalizar, a resposta aparecerá formatada no chat.
+Uma vez que o bot esteja online (você verá o status no terminal e o bot verde no Discord):
+
+### Modelo Híbrido de Workspaces
+- **Modo Auto-Sandbox (Zero-Config):** Crie qualquer canal ou thread dentro da categoria cadastrada em `ALLOWED_CATEGORY_ID` (ex: `#meu-experimento`). O Singularity criará automaticamente uma pasta isolada em `./workspaces/meu-experimento/`. Ao renomear o canal no Discord, a pasta em disco é automaticamente sincronizada!
+- **Modo Projetos Mapeados:** Se quiser apontar um canal para um repositório existente na sua máquina/VPS, use o comando `/singularity map` ou defina em `WORKSPACE_MAPPINGS`.
+
+### Comandos Slash de Gestão (`/singularity`)
+Todos os comandos são efêmeros (visíveis apenas para você):
+- `/singularity config`: Abre o painel visual interativo com:
+  - **Dropdown de Modelos:** `gemini-3.8-flash`, `gemini-3.8-pro`, `claude-sonnet-4-6`, `claude-opus-4-6`.
+  - **Stepper de Esforço (Reasoning Effort):** Botões `[ ◀ Menos ]` e `[ Mais ▶ ]` navegando entre `low`, `medium` e `high` com slider visual idêntico ao TUI oficial do `agy`.
+  - **Modo de Permissões:** Alterna entre `auto` e `ask`.
+- `/singularity map`: Abre um Modal pop-up nativo com formulário para colar/digitar o caminho do projeto sem poluir o chat.
+- `/singularity unmap`: Restaura o canal atual para o modo Auto-Sandbox.
+- `/singularity info`: Mostra o workspace vinculado, modo atual, modelo selecionado e esforço.
+- `/singularity list`: Lista todos os canais e seus caminhos de workspace.
+- `/singularity usage`: Consulta e exibe em tempo real o uso de cotas da CLI.
+
+### Modos de Permissão e Confirmação Interativa
+- 🟢 **Modo Autônomo (`auto`):** Executa diretamente injetando `--dangerously-skip-permissions` no `agy`. Velocidade máxima para prototipagem rápida.
+- 🛡️ **Modo Confirmação (`ask`):** Antes de rodar, o Singularity posta um Card interativo com botões `[ ✅ Executar Agora ]` e `[ ❌ Cancelar ]`. A tarefa só prossegue após seu clique.
 
 ### Uso Avançado com Threads (Recomendado)
-- Abra uma nova **Thread** dentro do canal mapeado para criar uma sessão de trabalho isolada (ex: `fix-auth-tokens`).
+- Abra uma nova **Thread** dentro do canal para criar uma sessão de trabalho temática (ex: `fix-auth-tokens`).
 - O Singularity automaticamente detectará o canal pai da Thread para saber em qual pasta trabalhar.
-- **Histórico Inteligente:** Dentro da Thread, o bot coleta as últimas 8 mensagens *apenas daquela thread*, montando o contexto da conversa (`[User]` e `[Singularity]`). Isso permite que você continue refinando o código:
+- **Histórico Inteligente:** Dentro da Thread, o bot coleta as últimas 8 mensagens *apenas daquela thread*, montando o contexto da conversa (`[User]` e `[Singularity]`). Isso permite que você continue refinando o código iterativamente:
   - Mensagem 1: *"Crie a migration para a tabela users"*
   - Mensagem 2: *"Agora adicione o campo avatar_url"* (a CLI saberá o que foi feito na mensagem anterior).
 - Não há vazamento de contexto entre threads irmãs!
 
-### Gerenciamento de Saídas Longas
-- **Até 1.900 caracteres:** O resultado é entregue em bloco ````bash ... ```` limpo.
-- **De 1.901 a 6.000 caracteres:** O bot divide a saída em chunks consecutivos sem quebrar linhas de log no meio.
-- **Mais de 6.000 caracteres:** O bot anexa o log completo em um arquivo `.txt` para download e envia um preview das últimas linhas, evitando poluir o canal no celular.
+### Formatação Rica em Markdown, LaTeX e Links Clicáveis
+- **Markdown Conversacional Nativo:** Respostas da IA não são forçadas dentro de blocos de terminal. Títulos, listas, negritos e blocos de código internos aparecem naturalmente.
+- **Normalização de Títulos:** Cabeçalhos `####` (não suportados nativamente pelo Discord) são normalizados para `### `.
+- **Conversão LaTeX $\rightarrow$ Unicode:** Fórmulas KaTeX (`$...$`) são convertidas para notação matemática Unicode legível (`√n`, `6k ± 1`, `≈ 10¹⁴`, `O(√n)`).
+- **Links do GitHub Automáticos:** Links `file://` da CLI são mapeados para URLs clicáveis no GitHub correspondente com linhas destacadas (ex: `#L10-L20`).
+- **Gerenciamento de Tamanho:**
+  - Até 1.950 caracteres: entregue diretamente.
+  - Mensagens longas: divididas preservando cercas de blocos de código (` ``` `) para que nenhum código fique aberto ou quebrado.
+  - Saídas extensas (>6.000 caracteres): o bot gera um anexo `.md` completo para download e exibe um preview formatado no chat. Se for erro de sistema, envia `.txt` com as últimas linhas.
 
 ---
 

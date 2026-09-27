@@ -55,12 +55,15 @@ Você está na rua, longe do computador, e precisa disparar uma tarefa no servid
 
 | Recurso | Como Funciona |
 |---|---|
-| **Ouvinte Ambiente** | Sem comandos de barra engessados (`/slash`). Converse de forma fluida e natural. |
-| **Memória de Conversa em Threads** | O bot isola o histórico das últimas 8 mensagens dentro da thread aberta, dando contexto contínuo à CLI. |
-| **Typing Heartbeat Real** | Enquanto tarefas pesadas rodam, o status *"digitando..."* pulsa a cada 7s, informando que a máquina está trabalhando. |
-| **Chunking Inteligente** | Saídas até 1.900 caracteres vão em bloco de código; saídas longas dividem sem quebrar linhas; saídas gigantes (>6.000) viram arquivo `.txt` anexo. |
-| **Segurança Zero-Trust** | Apenas um único usuário autorizado (`ALLOWED_USER_ID`) tem permissão de interagir. O resto é descartado silenciosamente. |
-| **Zero Portas Abertas** | Operação 100% outbound via WebSocket. Nenhuma porta de entrada pública aberta na sua VPS. |
+| **Ouvinte Ambiente & Conversa Natural** | Converse de forma fluida sem comandos engessados no chat. Envie instruções diretamente. |
+| **Workspaces Híbridos & Auto-Sandbox** | Canais na categoria autorizada ganham auto-sandbox imediato (`./workspaces/<slug>`) com sincronização de renomeação. Mapeie projetos fixos via modal `/singularity map`. |
+| **Painel de IA & Stepper de Raciocínio** | `/singularity config` oferece dropdown de modelos (Gemini 3.8 Flash/Pro, Claude Sonnet/Opus) e botões `[ ◀ Menos ]` `[ Mais ▶ ]` com slider idêntico ao TUI oficial do `agy`. |
+| **Modos de Permissão Flexíveis** | Escolha entre **🟢 Modo Autônomo** (`--dangerously-skip-permissions` para velocidade total) ou **🛡️ Confirmação Interativa** (cards com botões `[ Executar ]` e `[ Cancelar ]`). |
+| **Markdown Rico, LaTeX Unicode & Links** | Respostas naturais sem blocos de código artificiais. Fórmulas KaTeX (`$...$`) vertidas em Unicode (`√n`, `≈ 10¹⁴`), títulos `####` normalizados e links `file://` mapeados para o GitHub. |
+| **Memória Contínua em Threads** | Isola o histórico das últimas 8 mensagens dentro da thread aberta, permitindo refinamento iterativo contínuo sem vazamento de contexto. |
+| **Typing Heartbeat Real** | Enquanto tarefas rodam, o status *"digitando..."* pulsa a cada 7s, mantendo você informado do progresso. |
+| **Chunking Inteligente** | Divide mensagens respeitando cercas de código (` ``` `), com fallback de anexo `.md` / `.txt` se exceder 6.000 caracteres. |
+| **Segurança Zero-Trust & Zero Portas** | Apenas seu `ALLOWED_USER_ID` tem acesso. Operação 100% outbound via WebSocket sem portas públicas abertas na VPS. |
 
 ---
 
@@ -72,19 +75,26 @@ sequenceDiagram
     actor Dev as Você (Celular / Desktop)
     participant Discord as Discord Gateway (WebSocket)
     participant Daemon as Singularity Bridge
+    participant Middleware as Markdown & Git Middleware
     participant Runner as Runner Engine (execa)
     participant Workspace as Workspace no Servidor
 
     Dev->>Discord: Envia mensagem no canal ou thread
     Discord->>Daemon: Evento messageCreate (WebSocket)
-    Daemon->>Daemon: Valida ALLOWED_USER_ID & Mapeamento de Pasta
+    Daemon->>Daemon: Valida ALLOWED_USER_ID, Categoria & Workspace
     Daemon->>Discord: Coleta histórico recente da thread
+    alt Modo Confirmação (ask)
+        Daemon->>Discord: Card interativo [Executar] [Cancelar]
+        Dev->>Discord: Clica em [Executar]
+    end
     Daemon->>Discord: Pulsa heartbeat sendTyping() a cada 7s
-    Daemon->>Runner: Dispara CLI com cwd fixado na pasta
-    Runner->>Workspace: antigravity run "[contexto + prompt]"
+    Daemon->>Runner: Dispara CLI com cwd fixado na pasta e flags de modelo/esforço
+    Runner->>Workspace: agy --model <m> --effort <e> -p "[contexto + prompt]"
     Workspace-->>Runner: Retorna stdout / stderr / status
-    Runner-->>Daemon: Dados de tempo e saída formatados
-    Daemon->>Discord: Entrega resposta formatada (ou anexo .txt)
+    Runner-->>Middleware: Saída bruta do subprocesso
+    Middleware->>Middleware: Converte LaTeX para Unicode, normaliza H4 e mapeia links Git
+    Middleware-->>Daemon: Markdown higienizado para Discord
+    Daemon->>Discord: Entrega resposta formatada (chunks ou anexo .md)
     Discord-->>Dev: Notificação instantânea com resultado
 ```
 
@@ -107,8 +117,9 @@ Edite o arquivo `.env` com seu Token do Bot, seu User ID e os canais mapeados:
 ```ini
 DISCORD_TOKEN=seu_bot_token_aqui
 ALLOWED_USER_ID=seu_discord_user_id
+ALLOWED_CATEGORY_ID=id_da_sua_categoria_para_auto_sandboxes
 WORKSPACE_MAPPINGS={"123456789012345678":"/workspace/projeto-alpha"}
-COMMAND_PREFIX_BIN=antigravity run
+COMMAND_PREFIX_BIN=agy -p
 ```
 
 ### 3. Inicie o daemon
