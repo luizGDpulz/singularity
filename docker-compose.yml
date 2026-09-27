@@ -12,8 +12,8 @@ services:
       # Persistent auto-sandboxes and dynamic channel mappings
       - ./workspaces:/app/workspaces:rw
       - ./data:/app/data:rw
-      # Optional/Recommended: Mount host Antigravity CLI and auth credentials into the container
+      # Mount host Antigravity CLI and auth credentials into the container
       - ${HOME:-/root}/.gemini:/root/.gemini:rw
-      # Optional: Mount additional external projects root if configured
-      # - /home/ubuntu/projects:/workspace:rw
+      # Mount host projects directory (allows mapping any project like /srv/src/secullum-vms)
+      - ${HOST_PROJECTS_DIR:-/srv/src}:/srv/src:rw
     # Headless outbound-only architecture: no inbound ports exposed
