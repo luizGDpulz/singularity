@@ -154,11 +154,33 @@ docker compose restart
 pnpm docker:down    # ou: docker compose down
 ```
 
+### Como Funciona a Autenticação do Antigravity CLI no Container
+
+O `docker-compose.yml` mapeia o diretório `${HOME}/.gemini` do host para `/root/.gemini` no container. Existem duas formas simples de autenticar:
+
+#### Opção 1: Login Interativo Direto no Container (Headless OAuth)
+Se o container já estiver rodando, abra uma sessão interativa no container:
+```bash
+docker exec -it singularity-bridge agy
+```
+1. Como o container não possui navegador gráfico, o `agy` exibirá uma URL do Google no terminal:
+   `Go to the following URL in your browser: https://accounts.google.com/o/oauth2/auth?...`
+2. Abra essa URL no navegador do seu computador ou celular, autorize com sua conta Google e copie o código de autorização gerado.
+3. Cole o código de volta no terminal do container e pressione Enter.
+4. O `agy` salvará os tokens OAuth renováveis em `/root/.gemini/oauth_creds.json` (que fica gravado no host da VPS).
+5. Pressione `Ctrl+D Ctrl+D` para sair. **Pronto!** O Singularity utilizará essa autenticação para sempre, com auto-refresh de token em segundo plano.
+
+#### Opção 2: Copiar as Credenciais do seu Computador para a VPS
+Se você já tem o Antigravity instalado e logado na sua máquina local (onde os tokens já existem em `~/.gemini`):
+```bash
+# Execute no terminal do seu computador (Linux/Mac/WSL):
+scp -r ~/.gemini/* usuario@sua-vps:~/.gemini/
+```
+Ao subir o container com `./deploy.sh`, ele detectará os arquivos e herdará a autenticação imediatamente sem você precisar fazer login de novo!
+
 ---
 
 ## 5. Dinâmica de Uso no Discord
-
-Uma vez que o bot esteja online (você verá o status no terminal e o bot verde no Discord):
 
 Uma vez que o bot esteja online (você verá o status no terminal e o bot verde no Discord):
 

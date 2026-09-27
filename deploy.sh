@@ -147,11 +147,18 @@ fi
 # ------------------------------------------------------------------------------
 # 3. Preparação das Pastas Persistentes no Host
 # ------------------------------------------------------------------------------
-echo -e "${BLUE}[3/5] Criando pastas persistentes de dados e workspaces...${RESET}"
+echo -e "${BLUE}[3/5] Criando pastas persistentes e checando credenciais...${RESET}"
 
 mkdir -p workspaces data
-# Criar diretório ~/.gemini no host se não existir para mount
 mkdir -p "${HOME}/.gemini"
+
+if [ -f "${HOME}/.gemini/oauth_creds.json" ]; then
+    echo -e "${GREEN}✔ Credenciais do Antigravity detectadas em ~/.gemini/oauth_creds.json!${RESET}"
+    echo -e "  O container herdará o login da sua conta Google automaticamente via volume compartilhado."
+else
+    echo -e "${YELLOW}ℹ Nenhuma credencial encontrada em ~/.gemini/oauth_creds.json.${RESET}"
+    echo -e "  Você poderá autenticar após subir o container com um comando simples."
+fi
 
 echo -e "${GREEN}✔ Pastas ./workspaces e ./data prontas e persistidas.${RESET}\n"
 
@@ -178,10 +185,22 @@ echo -e "${CYAN}----------------------------------------------------------------
 $DOCKER_COMPOSE_CMD logs --tail=15 singularity-bridge
 echo -e "${CYAN}--------------------------------------------------------------------------------${RESET}"
 
+if [ ! -f "${HOME}/.gemini/oauth_creds.json" ]; then
+    echo -e "\n${YELLOW}${BOLD}⚠️ AUTENTICAÇÃO DO ANTIGRAVITY PENDENTE NO HOST:${RESET}"
+    echo -e "O Antigravity CLI precisa estar autenticado com sua conta Google para processar tarefas."
+    echo -e "Escolha a forma mais conveniente:"
+    echo -e "  ${BOLD}Opção A (Recomendada - Login interativo no container):${RESET}"
+    echo -e "    ${CYAN}docker exec -it singularity-bridge agy${RESET}"
+    echo -e "    (O terminal exibirá uma URL do Google. Abra no navegador do celular/PC, aprove o login e cole o código de volta)."
+    echo -e "  ${BOLD}Opção B (Copiar do seu PC local para a VPS via SCP):${RESET}"
+    echo -e "    ${CYAN}scp -r ~/.gemini/* usuario@sua-vps:~/.gemini/${RESET}"
+fi
+
 echo -e "\n${GREEN}${BOLD}🚀 DEPLOY DO SINGULARITY FINALIZADO COM SUCESSO!${RESET}"
 echo -e "Seu bot está conectado ao Discord e pronto para processar tarefas."
 echo -e "\n${BOLD}Comandos úteis para o dia a dia na VPS:${RESET}"
 echo -e "  • Acompanhar logs em tempo real: ${CYAN}${DOCKER_COMPOSE_CMD} logs -f${RESET}"
+echo -e "  • Entrar no terminal do container: ${CYAN}docker exec -it singularity-bridge bash${RESET}"
 echo -e "  • Reiniciar o container:          ${CYAN}${DOCKER_COMPOSE_CMD} restart${RESET}"
 echo -e "  • Parar o container:              ${CYAN}${DOCKER_COMPOSE_CMD} down${RESET}"
 echo -e "  • Atualizar e rebuildar:          ${CYAN}git pull && ./deploy.sh${RESET}\n"
