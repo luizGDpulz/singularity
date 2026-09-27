@@ -15,6 +15,7 @@ import { runnerService } from './services/runner.service.js';
 import { workspaceService } from './services/workspace.service.js';
 import { aiSettingsService } from './services/ai-settings.service.js';
 import {
+  handleAiButtonInteraction,
   handleAiSelectInteraction,
   handleAutocomplete,
   handleMapModalSubmit,
@@ -63,6 +64,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleSingularityCommand(interaction);
     } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith('singularity_select_')) {
       await handleAiSelectInteraction(interaction);
+    } else if (interaction.isButton() && interaction.customId.startsWith('singularity_btn_')) {
+      await handleAiButtonInteraction(interaction);
+    } else if (
+      interaction.isButton() &&
+      (interaction.customId === 'confirm_exec' || interaction.customId === 'cancel_exec')
+    ) {
+      if (interaction.user.id !== env.allowedUserId) {
+        await interaction.reply({
+          content: '⛔ Apenas o proprietário autorizado pode aprovar ou cancelar execuções.',
+          ephemeral: true,
+        });
+      }
+      // Note: Authorized user clicks are collected by promptMsg.awaitMessageComponent
     } else if (interaction.isModalSubmit() && interaction.customId === 'singularity_map_modal') {
       await handleMapModalSubmit(interaction);
     }
@@ -156,7 +170,11 @@ client.on(Events.MessageCreate, async (message) => {
           { name: '📁 Workspace', value: `\`${context.targetWorkspace}\``, inline: true },
           {
             name: '🤖 Modelo / Raciocínio',
-            value: `\`${aiSettingsService.getModelName()}\` (\`${aiSettings.effort.toUpperCase()}\`)`,
+            value: `\`${aiSettingsService.getModelName()}\` ${
+              aiSettingsService.getSupportedEfforts().length > 0
+                ? `(\`${aiSettings.effort.toUpperCase()}\`)`
+                : '*(Extended Thinking)*'
+            }`,
             inline: true,
           }
         )
@@ -174,8 +192,11 @@ client.on(Events.MessageCreate, async (message) => {
           time: 60000,
         });
 
+        // 1. Immediately acknowledge interaction to Discord Gateway to prevent 3s timeout
+        await confirmation.deferUpdate();
+
         if (confirmation.customId === 'cancel_exec') {
-          await confirmation.update({
+          await promptMsg.edit({
             content: '❌ **Execução cancelada por você.**',
             embeds: [],
             components: [],
@@ -183,19 +204,19 @@ client.on(Events.MessageCreate, async (message) => {
           return;
         }
 
-        // Approved! Update card and proceed
-        await confirmation.update({
+        // Approved! Update prompt message
+        await promptMsg.edit({
           content: '⏳ **Execução aprovada! Processando...**',
           embeds: [],
           components: [],
         });
       } catch {
-        // Timed out
+        // Timed out or expired
         await promptMsg.edit({
           content: '⏱️ **Tempo de confirmação expirado.** Tarefa cancelada.',
           embeds: [],
           components: [],
-        });
+        }).catch(() => {});
         return;
       }
     }
