@@ -54,13 +54,12 @@ export const singularityCommand = new SlashCommandBuilder()
       .addStringOption((opt) =>
         opt
           .setName('effort')
-          .setDescription('Set reasoning effort (Low, Medium, High, Max)')
+          .setDescription('Set reasoning effort (Low, Medium, High)')
           .setRequired(false)
           .addChoices(
             { name: '⚡ Low (Ultra-fast / lightweight)', value: 'low' },
             { name: '⚖️ Medium (Balanced speed & depth)', value: 'medium' },
-            { name: '🧠 High (Deep reasoning & code analysis - Recommended)', value: 'high' },
-            { name: '🚀 Max (Maximum reasoning budget)', value: 'max' }
+            { name: '🧠 High (Deep reasoning & code analysis - Recommended)', value: 'high' }
           )
       )
       .addStringOption((opt) =>

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'max';
+export type ReasoningEffort = 'low' | 'medium' | 'high';
 
 export interface ModelOption {
   id: string;
@@ -94,7 +94,7 @@ export class AiSettingsService {
    * Normalizes model identifiers (e.g. strips legacy suffix 'gemini-3.8-flash-high' -> 'gemini-3.8-flash').
    */
   public normalizeModel(rawModel: string): { modelId: string; inferredEffort?: ReasoningEffort } {
-    const match = rawModel.match(/^(gemini-[0-9.]+-flash|gemini-[0-9.]+-pro)-(low|medium|high|max)$/);
+    const match = rawModel.match(/^(gemini-[0-9.]+-flash|gemini-[0-9.]+-pro)-(low|medium|high)$/);
     if (match && match[1] && match[2]) {
       return {
         modelId: match[1],
@@ -116,7 +116,13 @@ export class AiSettingsService {
             this.settings.effort = inferredEffort;
           }
         }
-        if (parsed.effort) this.settings.effort = parsed.effort;
+        if (parsed.effort) {
+          if (parsed.effort === 'max') {
+            this.settings.effort = 'high';
+          } else if (['low', 'medium', 'high'].includes(parsed.effort)) {
+            this.settings.effort = parsed.effort as ReasoningEffort;
+          }
+        }
         if (parsed.permissionMode === 'auto' || parsed.permissionMode === 'ask') {
           this.settings.permissionMode = parsed.permissionMode;
         }
