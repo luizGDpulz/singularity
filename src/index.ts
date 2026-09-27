@@ -20,7 +20,9 @@ import {
   handleAiButtonInteraction,
   handleAiSelectInteraction,
   handleAutocomplete,
+  handleMapManualButton,
   handleMapModalSubmit,
+  handleProjectSelect,
   handleSingularityCommand,
   singularityCommand,
 } from './commands/singularity.command.js';
@@ -64,8 +66,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleAutocomplete(interaction);
     } else if (interaction.isChatInputCommand() && interaction.commandName === 'singularity') {
       await handleSingularityCommand(interaction);
+    } else if (interaction.isStringSelectMenu() && interaction.customId === 'singularity_select_project') {
+      await handleProjectSelect(interaction);
     } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith('singularity_select_')) {
       await handleAiSelectInteraction(interaction);
+    } else if (interaction.isButton() && interaction.customId === 'singularity_btn_map_manual') {
+      await handleMapManualButton(interaction);
     } else if (interaction.isButton() && interaction.customId.startsWith('singularity_btn_')) {
       await handleAiButtonInteraction(interaction);
     } else if (

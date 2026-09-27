@@ -61,7 +61,11 @@ function loadAndValidateEnv(): EnvConfig {
     ? path.resolve(process.cwd(), rawAutoRoot)
     : path.resolve(process.cwd(), 'workspaces');
 
-  // 6. COMMAND_PREFIX_BIN
+  // 6. HOST_PROJECTS_PATH (Optional: host directory containing existing projects to map)
+  const rawHostProjects = process.env['HOST_PROJECTS_PATH']?.trim();
+  const hostProjectsPath = rawHostProjects ? path.resolve(rawHostProjects) : undefined;
+
+  // 7. COMMAND_PREFIX_BIN
   const rawCommandPrefix = process.env['COMMAND_PREFIX_BIN']?.trim();
   const commandPrefixBin = rawCommandPrefix || 'agy -p';
 
@@ -105,6 +109,7 @@ function loadAndValidateEnv(): EnvConfig {
     allowedUserId: rawAllowedUserId as string,
     allowedCategoryId: rawAllowedCategoryId || undefined,
     autoWorkspacesRoot,
+    hostProjectsPath,
     workspaceMappings: Object.freeze(parsedMappings),
     commandPrefixBin,
     executionTimeoutMs,

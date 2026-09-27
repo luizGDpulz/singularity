@@ -74,11 +74,18 @@ export const singularityCommand = new SlashCommandBuilder()
           )
       )
   )
-  // Subcommand: map (Native Discord Modal popup)
+  // Subcommand: map (Native Discord Modal popup, Select Menu, or Autocomplete)
   .addSubcommand((sub) =>
     sub
       .setName('map')
-      .setDescription('Open the workspace mapping popup window to bind this channel')
+      .setDescription('Vincular este canal a uma pasta de projeto do host ou caminho customizado')
+      .addStringOption((opt) =>
+        opt
+          .setName('path')
+          .setDescription('Selecione um projeto do host ou digite o caminho')
+          .setRequired(false)
+          .setAutocomplete(true)
+      )
   )
   // Subcommand: unmap
   .addSubcommand((sub) =>
@@ -94,7 +101,7 @@ export const singularityCommand = new SlashCommandBuilder()
   );
 
 /**
- * Handles autocomplete requests for /singularity config model:<query>.
+ * Handles autocomplete requests for /singularity config model:<query> and /singularity map path:<query>.
  */
 export async function handleAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
   if (interaction.user.id !== env.allowedUserId) {
@@ -116,6 +123,23 @@ export async function handleAutocomplete(interaction: AutocompleteInteraction): 
         value: m.id,
       }))
     );
+    return;
+  }
+
+  if (focusedOption.name === 'path') {
+    const query = focusedOption.value.toLowerCase();
+    const projects = workspaceService.getAvailableHostProjects();
+    const filtered = projects
+      .filter((p) => p.name.toLowerCase().includes(query) || p.path.toLowerCase().includes(query))
+      .slice(0, 25);
+
+    await interaction.respond(
+      filtered.map((p) => ({
+        name: `📁 ${p.name} (${p.path})`.slice(0, 100),
+        value: p.path,
+      }))
+    );
+    return;
   }
 }
 
@@ -333,6 +357,63 @@ export async function handleMapModalSubmit(interaction: ModalSubmitInteraction):
 }
 
 /**
+ * Handles project selection from the /singularity map dropdown menu.
+ */
+export async function handleProjectSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+  if (interaction.user.id !== env.allowedUserId) {
+    await interaction.reply({ content: '⛔ Acesso negado.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const selectedPath = interaction.values[0];
+  const channelId = interaction.channelId;
+  const channel = interaction.channel;
+  const channelName = channel && 'name' in channel ? channel.name : channelId;
+
+  if (!selectedPath || !channelId) {
+    await interaction.reply({ content: '❌ Projeto ou canal inválido.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const resolved = workspaceService.setManualMapping(channelId, selectedPath);
+
+  await interaction.update({
+    content: `✅ **Workspace Mapeado com Sucesso!**\n• **Canal:** <#${channelId}> (\`${channelName}\`)\n• **Diretório Vinculado:** \`${resolved}\`\n\nTodos os comandos neste canal serão executados diretamente nesta pasta do projeto.`,
+    components: [],
+  });
+}
+
+/**
+ * Handles the "Digitar Caminho Manualmente" button to open the modal.
+ */
+export async function handleMapManualButton(interaction: ButtonInteraction): Promise<void> {
+  if (interaction.user.id !== env.allowedUserId) {
+    await interaction.reply({ content: '⛔ Acesso negado.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const channelId = interaction.channelId;
+  const currentMapping = channelId ? workspaceService.listManualMappings()[channelId] || '' : '';
+
+  const modal = new ModalBuilder()
+    .setCustomId('singularity_map_modal')
+    .setTitle('📁 Mapear Workspace do Projeto');
+
+  const pathInput = new TextInputBuilder()
+    .setCustomId('workspace_path')
+    .setLabel('Caminho do Diretório (Host / VPS)')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('Ex: /srv/src/secullum-vms ou C:/Projects/meu-app')
+    .setValue(currentMapping)
+    .setRequired(true);
+
+  const row = new ActionRowBuilder<TextInputBuilder>().addComponents(pathInput);
+  modal.addComponents(row);
+
+  await interaction.showModal(modal);
+}
+
+/**
  * Handles /singularity slash command interactions.
  */
 export async function handleSingularityCommand(
@@ -487,7 +568,53 @@ export async function handleSingularityCommand(
     }
 
     case 'map': {
-      // Open native Discord Modal window!
+      const explicitPath = interaction.options.getString('path')?.trim();
+      if (explicitPath) {
+        const resolved = workspaceService.setManualMapping(channelId, explicitPath);
+        await interaction.reply({
+          content: `✅ **Workspace Mapeado com Sucesso!**\n• **Canal:** <#${channelId}> (\`${channelName}\`)\n• **Diretório Vinculado:** \`${resolved}\`\n\nTodos os comandos e mensagens neste canal serão executados diretamente nesta pasta do projeto.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        break;
+      }
+
+      // Check available projects in host projects folder
+      const availableProjects = workspaceService.getAvailableHostProjects();
+
+      if (availableProjects.length > 0) {
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId('singularity_select_project')
+          .setPlaceholder('📂 Escolha um projeto para vincular...')
+          .addOptions(
+            availableProjects.slice(0, 25).map((p) => ({
+              label: p.name.slice(0, 100),
+              description: p.path.slice(0, 100),
+              value: p.path,
+              emoji: '📁',
+            }))
+          );
+
+        const manualBtn = new ButtonBuilder()
+          .setCustomId('singularity_btn_map_manual')
+          .setLabel('✏️ Digitar Caminho Manualmente')
+          .setStyle(ButtonStyle.Secondary);
+
+        const row1 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+        const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(manualBtn);
+
+        await interaction.reply({
+          content: [
+            '### 📁 Vincular Projeto a este Canal',
+            `Projetos detectados no diretório host (\`${env.hostProjectsPath || '/srv/src'}\`):`,
+            'Escolha um projeto na lista abaixo ou clique para digitar um caminho manual:',
+          ].join('\n'),
+          components: [row1, row2],
+          flags: MessageFlags.Ephemeral,
+        });
+        break;
+      }
+
+      // If no host projects discovered, open modal directly
       const currentMapping = workspaceService.listManualMappings()[channelId] || '';
 
       const modal = new ModalBuilder()
@@ -498,7 +625,7 @@ export async function handleSingularityCommand(
         .setCustomId('workspace_path')
         .setLabel('Caminho do Diretório (Host / VPS)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Ex: C:/Projects/meu-app ou /workspace/app')
+        .setPlaceholder('Ex: /srv/src/secullum-vms ou C:/Projects/meu-app')
         .setValue(currentMapping)
         .setRequired(true);
 

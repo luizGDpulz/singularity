@@ -208,6 +208,29 @@ export class WorkspaceService {
   public listManualMappings(): Record<string, string> {
     return { ...this.manualMappings };
   }
+
+  /**
+   * Scans and returns available project directories inside HOST_PROJECTS_PATH or /srv/src.
+   */
+  public getAvailableHostProjects(): { name: string; path: string }[] {
+    const root = env.hostProjectsPath || (fs.existsSync('/srv/src') ? '/srv/src' : undefined);
+    if (!root || !fs.existsSync(root)) {
+      return [];
+    }
+
+    try {
+      const entries = fs.readdirSync(root, { withFileTypes: true });
+      return entries
+        .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules')
+        .map((entry) => ({
+          name: entry.name,
+          path: path.join(root, entry.name),
+        }));
+    } catch (err) {
+      console.error('⚠️ [WorkspaceService] Error scanning host projects:', err);
+      return [];
+    }
+  }
 }
 
 export const workspaceService = new WorkspaceService();

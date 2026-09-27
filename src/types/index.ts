@@ -25,6 +25,7 @@ export interface EnvConfig {
   allowedCategoryId?: string;
   autoWorkspacesRoot: string;
   workspaceMappings: WorkspaceMappings;
+  hostProjectsPath?: string;
   commandPrefixBin: string;
   executionTimeoutMs: number;
   maxBufferBytes: number;
