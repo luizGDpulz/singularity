@@ -29,20 +29,23 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Install runtime utilities required for CLI workflows
+# Install runtime utilities and glibc compatibility for Linux CLI binaries
 RUN apk update && \
     apk add --no-cache \
       bash \
       git \
       curl \
-      ca-certificates && \
+      ca-certificates \
+      libc6-compat \
+      gcompat && \
     rm -rf /var/cache/apk/*
 
 # Install pnpm globally in runner stage
 RUN npm install -g pnpm@11.3.0
 
-# Set production environment
+# Set production environment and include Antigravity CLI path
 ENV NODE_ENV=production
+ENV PATH="/root/.gemini/bin:${PATH}"
 
 # Copy package manifests and install only production dependencies
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -51,8 +54,8 @@ RUN pnpm install --prod --frozen-lockfile
 # Copy compiled JavaScript from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Create base workspace directory for external mounting
-RUN mkdir -p /workspace
+# Create base directories for workspaces and persistent data
+RUN mkdir -p /app/workspaces /app/data /workspace
 
 # Run via node directly
 CMD ["node", "dist/index.js"]

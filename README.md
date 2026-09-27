@@ -123,12 +123,13 @@ COMMAND_PREFIX_BIN=agy -p
 ```
 
 ### 3. Inicie o daemon
+
 ```bash
-# Modo desenvolvimento (com hot-reload)
+# Modo desenvolvimento local (com hot-reload):
 pnpm dev
 
-# Ou com Docker na VPS:
-docker compose up -d --build
+# Ou deploy automático com 1 comando na VPS (configura .env e sobe Docker):
+chmod +x deploy.sh && ./deploy.sh
 ```
 
 ---

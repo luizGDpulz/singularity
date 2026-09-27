@@ -105,56 +105,53 @@ pnpm start
 
 ---
 
-## 4. Execução em Produção com Docker Compose
+## 4. Execução em Produção na VPS (Deploy com 1 Comando)
 
-A forma recomendada de manter o Singularity rodando 24/7 na sua VPS remota é através do Docker.
-
-### Estrutura do `docker-compose.yml`
-O arquivo `docker-compose.yml` já vem configurado com:
-- Multi-stage build baseado em Alpine Linux (super leve e rápido).
-- Política de reinício automático `restart: unless-stopped`.
-- `init: true` para tratamento gracioso de processos filhos e sinais SIGTERM.
-- Rede sem portas abertas (apenas tráfego de saída WebSocket).
-
-### Mapeando os Workspaces
-No `docker-compose.yml`, aponte os volumes para os diretórios onde seus projetos reais vivem no host da VPS:
-
-```yaml
-services:
-  singularity-bridge:
-    build: .
-    container_name: singularity-bridge
-    restart: unless-stopped
-    init: true
-    env_file:
-      - .env
-    volumes:
-      # Monta seus projetos da VPS dentro do diretório /workspace do container:
-      - /home/ubuntu/meus-projetos:/workspace:rw
-```
-
-E no seu `.env`, ajuste o `WORKSPACE_MAPPINGS` para refletir os caminhos internos do container:
-```json
-{"123456789012345678": "/workspace/projeto-alpha"}
-```
-
-### Comandos de Operação Docker
+A forma recomendada e mais rápida de colocar o Singularity rodando 24/7 na sua VPS é utilizando o script interativo **`deploy.sh`**:
 
 ```bash
-# Iniciar o daemon em segundo plano (com build)
-docker compose up -d --build
+# 1. Torne o script executável e rode:
+chmod +x deploy.sh
+./deploy.sh
+```
 
-# Acompanhar os logs em tempo real
-docker compose logs -f
+O assistente cuidará de tudo:
+1. Valida se o Docker e o Docker Compose estão instalados.
+2. Solicita interativamente suas variáveis de ambiente (`DISCORD_TOKEN`, `ALLOWED_USER_ID`, etc.) e gera um `.env` seguro (`chmod 600`).
+3. Cria e prepara as pastas persistentes de dados e workspaces.
+4. Constrói a imagem Docker Alpine multi-stage otimizada e inicia o container em segundo plano.
+5. Exibe os logs da conexão com o Discord Gateway.
 
-# Verificar status do container
+---
+
+### Estrutura do `docker-compose.yml`
+O arquivo `docker-compose.yml` vem configurado com:
+- Multi-stage build baseado em Alpine Linux com suporte a glibc (`libc6-compat`, `gcompat`).
+- Política de reinício automático `restart: unless-stopped`.
+- `init: true` para tratamento gracioso de processos filhos e sinais SIGTERM.
+- Rede sem portas públicas abertas (100% tráfego de saída WebSocket).
+- Volumes persistentes:
+  - `./workspaces:/app/workspaces:rw` (auto-sandboxes do Discord vivem no host da VPS).
+  - `./data:/app/data:rw` (mapeamentos dinâmicos `/singularity map` persistem entre reinicializações).
+  - `~/.gemini:/root/.gemini:rw` (compartilha binário e credenciais do Antigravity CLI do host).
+
+### Comandos de Operação Docker na VPS
+
+```bash
+# Iniciar ou atualizar com build:
+pnpm docker:up      # ou: docker compose up -d --build
+
+# Acompanhar os logs em tempo real:
+pnpm docker:logs    # ou: docker compose logs -f
+
+# Verificar status do container:
 docker compose ps
 
-# Reiniciar o serviço
+# Reiniciar o serviço:
 docker compose restart
 
-# Parar o serviço
-docker compose down
+# Parar o serviço:
+pnpm docker:down    # ou: docker compose down
 ```
 
 ---

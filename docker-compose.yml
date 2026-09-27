@@ -9,9 +9,11 @@ services:
     env_file:
       - .env
     volumes:
-      # Mount external project workspaces into the container.
-      # You can mount individual project directories or a parent folder:
-      - ./workspaces:/workspace:rw
-      # Example of mounting host home workspaces:
-      # - /home/user/projects:/workspaces/projects:rw
+      # Persistent auto-sandboxes and dynamic channel mappings
+      - ./workspaces:/app/workspaces:rw
+      - ./data:/app/data:rw
+      # Optional/Recommended: Mount host Antigravity CLI and auth credentials into the container
+      - ${HOME:-/root}/.gemini:/root/.gemini:rw
+      # Optional: Mount additional external projects root if configured
+      # - /home/ubuntu/projects:/workspace:rw
     # Headless outbound-only architecture: no inbound ports exposed
