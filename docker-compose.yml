@@ -1,0 +1,17 @@
+services:
+  singularity-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: singularity-bridge
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    volumes:
+      # Mount external project workspaces into the container.
+      # You can mount individual project directories or a parent folder:
+      - ./workspaces:/workspace:rw
+      # Example of mounting host home workspaces:
+      # - /home/user/projects:/workspaces/projects:rw
+    # Headless outbound-only architecture: no inbound ports exposed
