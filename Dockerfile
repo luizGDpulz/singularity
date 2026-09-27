@@ -1,10 +1,10 @@
 # ==============================================================================
 # Multi-stage Dockerfile for Singularity Bridge (using pnpm)
-# Base: Alpine Linux (Node 20), ARM64 & x86_64 compatible
+# Base: Debian Bookworm (Node 22 Slim), native glibc for Antigravity CLI (agy)
 # ==============================================================================
 
 # --- Stage 1: Build & Compilation ---
-FROM node:20-alpine AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
@@ -25,20 +25,18 @@ COPY src ./src
 RUN pnpm run build
 
 # --- Stage 2: Lean Production Runtime ---
-FROM node:20-alpine AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 
-# Install runtime utilities and glibc compatibility for Linux CLI binaries
-RUN apk update && \
-    apk add --no-cache \
+# Install runtime utilities
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
       bash \
       git \
       curl \
-      ca-certificates \
-      libc6-compat \
-      gcompat && \
-    rm -rf /var/cache/apk/*
+      ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install pnpm globally in runner stage
 RUN npm install -g pnpm@11.3.0
