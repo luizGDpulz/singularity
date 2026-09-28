@@ -31,22 +31,22 @@ Você está na rua, longe do computador, e precisa disparar uma tarefa no servid
 - ✅ **Com o Singularity:** Você abre o Discord, entra na thread do seu projeto e conversa normalmente. O Singularity escuta, executa no diretório certo, mantém o feedback de digitação em tempo real e devolve a resposta perfeitamente formatada.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 💬 Discord Thread: #project-alpha > [feat-auth]                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ 👤 Luiz:                                                                    │
-│    Adicione rota de refresh token com JWT e rode a suíte de testes.         │
-│                                                                             │
-│ 🤖 Singularity: [digitando...] (heartbeat a cada 7s)                        │  
-│                                                                             │
-│ 🤖 Singularity:                                                             │
-│    ✅ [Singularity] Execution Succeeded (4.8s)                              │
-│    • Workspace: /workspace/project-alpha                                    │
-│    ```bash                                                                  │
-│    PASS src/auth/jwt.service.spec.ts (6 tests passed)                       │
-│    Coverage: 94.2% statements                                               │
-│    ```                                                                      │
-└─────────────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------------+
+| [Discord Thread] #project-alpha > [feat-auth]                               |
++-----------------------------------------------------------------------------+
+| [Luiz]:                                                                     |
+|    Adicione rota de refresh token com JWT e rode a suíte de testes.         |
+|                                                                             |
+| [Singularity]: [digitando...] (heartbeat a cada 7s)                         |
+|                                                                             |
+| [Singularity]:                                                              |
+|    [OK] [Singularity] Execution Succeeded (4.8s)                            |
+|    * Workspace: /workspace/project-alpha                                    |
+|    ```bash                                                                  |
+|    PASS src/auth/jwt.service.spec.ts (6 tests passed)                       |
+|    Coverage: 94.2% statements                                               |
+|    ```                                                                      |
++-----------------------------------------------------------------------------+
 ```
 
 ---
